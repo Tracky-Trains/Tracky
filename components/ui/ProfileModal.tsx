@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import React, { useEffect, useState } from 'react';
-import { Image, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
     interpolate,
@@ -391,7 +391,7 @@ export default function ProfileModal({ onClose, onOpenSettings }: ProfileModalPr
             </View>
           </View>
 
-          <TouchableOpacity style={styles.allStatsButton} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.allStatsButton} activeOpacity={0.7} onPress={() => Alert.alert('Coming Soon', 'Detailed train stats are on the way!')}>
             <Text style={styles.allStatsButtonText}>All Train Stats</Text>
             <Ionicons name="chevron-forward" size={16} color="#fff" />
           </TouchableOpacity>
@@ -410,7 +410,7 @@ export default function ProfileModal({ onClose, onOpenSettings }: ProfileModalPr
             <Text style={styles.delaySubtext}>
               Delayed trips averaged {Math.round(stats.averageDelayMinutes)}m late
             </Text>
-            <TouchableOpacity style={styles.delayButton} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.delayButton} activeOpacity={0.7} onPress={() => Alert.alert('Coming Soon', 'Detailed delay stats are on the way!')}>
               <Text style={styles.delayButtonText}>All Delay Stats</Text>
               <Ionicons name="chevron-forward" size={16} color="#fff" />
             </TouchableOpacity>
@@ -423,13 +423,13 @@ export default function ProfileModal({ onClose, onOpenSettings }: ProfileModalPr
             <View style={styles.mostRiddenHeader}>
               <Text style={styles.mostRiddenTitle}>Most ridden route</Text>
               <TouchableOpacity onPress={handleShareMostRidden} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Ionicons name="share-outline" size={22} color={AppColors.secondary} />
+                <Ionicons name="share-outline" size={22} color="#888" />
               </TouchableOpacity>
             </View>
             <Text style={styles.mostRiddenRouteName}>{stats.mostRiddenRoute.routeName}</Text>
             <Text style={styles.mostRiddenCount}>{stats.mostRiddenRoute.count} trips</Text>
             <View style={styles.mostRiddenIcon}>
-              <MaterialCommunityIcons name="train-car" size={32} color={AppColors.secondary} />
+              <MaterialCommunityIcons name="train-car" size={32} color="#ccc" />
             </View>
           </View>
         )}
@@ -643,7 +643,7 @@ const styles = StyleSheet.create({
   },
   passportStatSubtext: {
     fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: '#fff',
     marginTop: 2,
   },
   passportStatsRow: {
@@ -720,12 +720,10 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   mostRiddenCard: {
-    backgroundColor: AppColors.background.secondary,
+    backgroundColor: '#fff',
     borderRadius: BorderRadius.lg,
     padding: Spacing.xl,
     marginBottom: Spacing.lg,
-    borderWidth: 1,
-    borderColor: AppColors.border.primary,
     position: 'relative',
     overflow: 'hidden',
     minHeight: 200,
@@ -739,17 +737,17 @@ const styles = StyleSheet.create({
   mostRiddenTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: AppColors.secondary,
+    color: '#888',
   },
   mostRiddenRouteName: {
     fontSize: 42,
     fontWeight: 'bold',
-    color: AppColors.primary,
+    color: '#000',
     marginBottom: Spacing.xs,
   },
   mostRiddenCount: {
     fontSize: 16,
-    color: AppColors.secondary,
+    color: '#555',
   },
   mostRiddenIcon: {
     position: 'absolute',
