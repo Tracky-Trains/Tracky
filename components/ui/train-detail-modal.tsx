@@ -15,6 +15,7 @@ import type { Train } from '../../types/train';
 import { haversineDistance } from '../../utils/distance';
 import { gtfsParser } from '../../utils/gtfs-parser';
 import { logger, openReportBadDataEmail } from '../../utils/logger';
+import { getTimezoneForStop } from '../../utils/timezone';
 import { calculateDuration, getCountdownForTrain, pluralize } from '../../utils/train-display';
 import { convertDistance, distanceSuffix, formatTemp, weatherApiTempUnit } from '../../utils/units';
 import { getWeatherCondition } from '../../utils/weather';
@@ -280,10 +281,12 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
       const originStop = gtfsParser.getStop(trainData.fromCode);
       const destStop = gtfsParser.getStop(trainData.toCode);
       
-      const originTz = originStop?.stop_timezone;
-      const destTz = destStop?.stop_timezone;
-      
-      if (originTz && destTz && originTz !== destTz) {
+      const originTz = originStop ? getTimezoneForStop(originStop) : null;
+      const destTz = destStop ? getTimezoneForStop(destStop) : null;
+
+      if (!originTz || !destTz) return null;
+
+      if (originTz !== destTz) {
         // Calculate timezone offset difference
         const now = new Date();
         const formatter = new Intl.DateTimeFormat('en-US', { 
@@ -319,7 +322,7 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
       
       return {
         hasChange: false,
-        message: 'Both stations are in the same timezone',
+        message: 'No Timezone Change',
       };
     } catch (e) {
       return null;
