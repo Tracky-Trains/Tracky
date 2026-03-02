@@ -19,9 +19,11 @@ export interface CalendarSyncPrefs {
   scanDays: number;
 }
 
-import { formatTime } from '../utils/time-formatting';
-import { formatDateForDisplay, calculateDaysAway } from '../utils/date-helpers';
+import { calculateDaysAway, formatDateForDisplay } from '../utils/date-helpers';
+import { haversineDistance } from '../utils/distance';
 import { logger } from '../utils/logger';
+import { formatTime, parseTimeToMinutes } from '../utils/time-formatting';
+import { stationLoader } from './station-loader';
 
 export class TrainStorageService {
   /**
@@ -206,6 +208,43 @@ export class TrainStorageService {
   }
 
   /**
+   * Backfill missing duration/distance on existing history entries.
+   */
+  static async backfillHistoryStats(): Promise<void> {
+    try {
+      const history = await this.getTripHistory();
+      let changed = false;
+
+      for (const trip of history) {
+        if (trip.duration == null && trip.departTime && trip.arriveTime) {
+          const dep = parseTimeToMinutes(trip.departTime);
+          const arr = parseTimeToMinutes(trip.arriveTime);
+          let dur = arr - dep;
+          if (dur < 0) dur += 24 * 60;
+          if (dur > 0) {
+            trip.duration = dur;
+            changed = true;
+          }
+        }
+        if (trip.distance == null && trip.fromCode && trip.toCode) {
+          const from = stationLoader.getStationByCode(trip.fromCode);
+          const to = stationLoader.getStationByCode(trip.toCode);
+          if (from && to) {
+            trip.distance = haversineDistance(from.lat, from.lon, to.lat, to.lon);
+            changed = true;
+          }
+        }
+      }
+
+      if (changed) {
+        await AsyncStorage.setItem(STORAGE_KEYS.TRIP_HISTORY, JSON.stringify(history));
+      }
+    } catch (error) {
+      logger.error('Error backfilling history stats:', error);
+    }
+  }
+
+  /**
    * Add a completed trip to history with dedup check.
    * Returns true if the entry was added, false if it already existed.
    */
@@ -232,6 +271,44 @@ export class TrainStorageService {
    */
   static async moveToHistory(train: Train): Promise<boolean> {
     try {
+      // Calculate distance as the crow flies using station coordinates
+      let distance: number | undefined;
+      if (train.fromCode && train.toCode) {
+        try {
+          const fromStation = stationLoader.getStationByCode(train.fromCode);
+          const toStation = stationLoader.getStationByCode(train.toCode);
+          if (fromStation && toStation) {
+            distance = haversineDistance(
+              fromStation.lat,
+              fromStation.lon,
+              toStation.lat,
+              toStation.lon
+            );
+          }
+        } catch (error) {
+          logger.error('Error calculating distance:', error);
+        }
+      }
+
+      // Calculate duration from depart/arrive times
+      let duration: number | undefined;
+      try {
+        const departMinutes = parseTimeToMinutes(train.departTime);
+        const arriveMinutes = parseTimeToMinutes(train.arriveTime);
+        duration = arriveMinutes - departMinutes;
+        // Handle next-day arrivals
+        if (duration < 0) {
+          duration += 24 * 60;
+        }
+        // Adjust for day offsets if available
+        if (typeof train.arriveDayOffset === 'number' && typeof train.departDayOffset === 'number') {
+          const dayDiff = train.arriveDayOffset - train.departDayOffset;
+          duration += dayDiff * 24 * 60;
+        }
+      } catch (error) {
+        logger.error('Error calculating duration:', error);
+      }
+
       const entry: CompletedTrip = {
         tripId: train.tripId || '',
         trainNumber: train.trainNumber,
@@ -245,6 +322,9 @@ export class TrainStorageService {
         date: train.date,
         travelDate: Date.now(),
         completedAt: Date.now(),
+        delay: train.realtime?.delay,
+        distance,
+        duration,
       };
 
       await this.addToHistory(entry);

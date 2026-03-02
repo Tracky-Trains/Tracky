@@ -152,4 +152,7 @@ export interface CompletedTrip {
   date: string;
   travelDate: number; // timestamp
   completedAt: number; // timestamp when moved to history
+  delay?: number; // delay in minutes (positive = late, negative = early)
+  distance?: number; // distance in miles
+  duration?: number; // trip duration in minutes
 }

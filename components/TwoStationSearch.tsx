@@ -1,11 +1,11 @@
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import React, { useEffect, useState, useRef } from 'react';
-import { Platform, Text, TextInput, TouchableOpacity, View, StyleSheet } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import FontAwesome6 from 'react-native-vector-icons/FontAwesome6';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { AppColors, BorderRadius, FontSizes, Spacing } from '../constants/theme';
 import { getTrainDisplayName } from '../services/api';
-import type { Stop, EnrichedStopTime } from '../types/train';
+import type { EnrichedStopTime, Stop } from '../types/train';
 import { gtfsParser } from '../utils/gtfs-parser';
 
 interface TripResult {
@@ -20,8 +20,8 @@ interface TwoStationSearchProps {
   onClose: () => void;
 }
 
-import { formatTime } from '../utils/time-formatting';
 import { formatDateForDisplay } from '../utils/date-helpers';
+import { formatTime } from '../utils/time-formatting';
 
 // Use imported utilities
 const formatDateForPill = formatDateForDisplay;

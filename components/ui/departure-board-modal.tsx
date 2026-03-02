@@ -2,30 +2,30 @@ import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/dat
 import * as Haptics from 'expo-haptics';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
-  Dimensions,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Dimensions,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
-
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppColors, BorderRadius, Spacing } from '../../constants/theme';
 import { TrainAPIService } from '../../services/api';
 import type { Stop, Train } from '../../types/train';
+import { addDays, getStartOfDay, isSameDay } from '../../utils/date-helpers';
+import { logger } from '../../utils/logger';
+import { parseTimeToMinutes } from '../../utils/time-formatting';
 import { SlideUpModalContext } from './slide-up-modal';
 import TimeDisplay from './TimeDisplay';
-import { parseTimeToMinutes } from '../../utils/time-formatting';
-import { getDaysAwayLabel, isSameDay, getStartOfDay, addDays } from '../../utils/date-helpers';
-import { logger } from '../../utils/logger';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface DepartureBoardModalProps {
   station: Stop;
@@ -745,7 +745,7 @@ const styles = StyleSheet.create({
   filterToggle: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: AppColors.background.secondary,
+    backgroundColor: AppColors.background.tertiary,
     borderRadius: 18,
     height: 36,
   },
@@ -778,7 +778,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: AppColors.background.secondary,
+    backgroundColor: AppColors.background.tertiary,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -791,7 +791,7 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.sm,
-    backgroundColor: AppColors.background.secondary,
+    backgroundColor: AppColors.background.tertiary,
     borderRadius: BorderRadius.md,
   },
   dateText: {
@@ -802,7 +802,7 @@ const styles = StyleSheet.create({
   datePickerContainer: {
     marginHorizontal: Spacing.xl,
     marginBottom: Spacing.md,
-    backgroundColor: AppColors.background.secondary,
+    backgroundColor: AppColors.background.tertiary,
     borderRadius: BorderRadius.md,
     overflow: 'hidden',
   },
@@ -823,7 +823,7 @@ const styles = StyleSheet.create({
     marginHorizontal: Spacing.xl,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
-    backgroundColor: AppColors.background.secondary,
+    backgroundColor: AppColors.background.tertiary,
     borderRadius: BorderRadius.md,
     gap: Spacing.sm,
   },

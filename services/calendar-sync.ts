@@ -5,11 +5,13 @@
 import * as Calendar from 'expo-calendar';
 import { Platform } from 'react-native';
 import type { CompletedTrip, SavedTrainRef } from '../types/train';
-import { gtfsParser } from '../utils/gtfs-parser';
-import { formatTime } from '../utils/time-formatting';
 import { formatDateForDisplay } from '../utils/date-helpers';
-import { TrainStorageService } from './storage';
+import { gtfsParser } from '../utils/gtfs-parser';
 import { logger } from '../utils/logger';
+import { haversineDistance } from '../utils/distance';
+import { formatTime, parseTimeToMinutes } from '../utils/time-formatting';
+import { stationLoader } from './station-loader';
+import { TrainStorageService } from './storage';
 
 export interface DeviceCalendar {
   id: string;
@@ -243,7 +245,12 @@ export async function syncPastTrips(
   endDate.setHours(23, 59, 59, 999);
 
   const startDate = new Date(now);
-  startDate.setDate(startDate.getDate() - scanDays);
+  if (scanDays === -1) {
+    // "All" option - scan as far back as possible (10 years)
+    startDate.setFullYear(startDate.getFullYear() - 10);
+  } else {
+    startDate.setDate(startDate.getDate() - scanDays);
+  }
   startDate.setHours(0, 0, 0, 0);
 
   const trainEvents = await fetchTrainEvents(calendarIds, startDate, endDate);
@@ -259,6 +266,36 @@ export async function syncPastTrips(
     const matched = matchEventToTrip(event.title, new Date(event.startDate), event.location ?? undefined);
     if (!matched) continue;
 
+    // Calculate duration from times
+    let duration: number | undefined;
+    try {
+      const departMinutes = parseTimeToMinutes(matched.departTime);
+      const arriveMinutes = parseTimeToMinutes(matched.arriveTime);
+      duration = arriveMinutes - departMinutes;
+      if (duration < 0) {
+        duration += 24 * 60;
+      }
+    } catch (error) {
+      logger.error('Calendar sync: Error calculating duration:', error);
+    }
+
+    // Calculate distance as the crow flies using station coordinates
+    let distance: number | undefined;
+    try {
+      const fromStation = stationLoader.getStationByCode(matched.fromStopId);
+      const toStation = stationLoader.getStationByCode(matched.toStopId);
+      if (fromStation && toStation) {
+        distance = haversineDistance(
+          fromStation.lat,
+          fromStation.lon,
+          toStation.lat,
+          toStation.lon
+        );
+      }
+    } catch (error) {
+      logger.error('Calendar sync: Error calculating distance:', error);
+    }
+
     const entry: CompletedTrip = {
       tripId: matched.tripId,
       trainNumber: matched.trainNumber,
@@ -272,6 +309,8 @@ export async function syncPastTrips(
       date: formatDateForDisplay(matched.eventDate),
       travelDate: matched.eventDate.getTime(),
       completedAt: Date.now(),
+      duration,
+      distance,
     };
 
     const key = `${entry.tripId}|${entry.fromCode}|${entry.toCode}|${entry.date}`;

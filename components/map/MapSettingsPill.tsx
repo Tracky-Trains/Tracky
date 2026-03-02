@@ -175,7 +175,7 @@ export default function MapSettingsPill({
             pointerEvents={isExpanded ? 'none' : 'auto'}
           >
             <TouchableOpacity style={styles.pillButton} onPress={handleSettingsPress} activeOpacity={0.7}>
-              <Ionicons name="settings-outline" size={24} color={AppColors.primary} />
+              <Ionicons name="map-outline" size={24} color={AppColors.primary} />
             </TouchableOpacity>
             <TouchableOpacity style={styles.pillButton} onPress={onRecenter} activeOpacity={0.7}>
               <MaterialIcons name="my-location" size={22} color={AppColors.primary} />

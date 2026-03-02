@@ -1,26 +1,25 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    ScrollView,
+    StyleSheet,
+    Switch,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { AppColors, BorderRadius, FontSizes, Spacing } from '../../constants/theme';
+import { AppColors, BorderRadius, Spacing } from '../../constants/theme';
 import {
-  type DeviceCalendar,
-  type SyncResult,
-  getDeviceCalendars,
-  hasCalendarPermission,
-  requestCalendarPermission,
-  syncPastTrips,
+    type DeviceCalendar,
+    type SyncResult,
+    getDeviceCalendars,
+    hasCalendarPermission,
+    requestCalendarPermission,
+    syncPastTrips,
 } from '../../services/calendar-sync';
 import { TrainStorageService } from '../../services/storage';
-import type { CalendarSyncPrefs } from '../../services/storage';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -33,6 +32,7 @@ const SCAN_OPTIONS = [
   { label: '30 days', value: 30 },
   { label: '90 days', value: 90 },
   { label: '1 year', value: 365 },
+  { label: 'All', value: -1 },
 ] as const;
 
 export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalProps) {
@@ -129,49 +129,50 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
   return (
     <View style={{ flex: 1 }}>
       {/* Header */}
-      <View style={styles.titleRow}>
+      <View style={styles.header}>
         <Text style={styles.title}>Settings</Text>
+        <TouchableOpacity
+          onPress={onClose}
+          style={styles.closeButton}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="close" size={24} color={AppColors.primary} />
+        </TouchableOpacity>
       </View>
-      <TouchableOpacity
-        onPress={onClose}
-        style={styles.closeButton}
-        activeOpacity={0.7}
-      >
-        <Ionicons name="close" size={22} color={AppColors.primary} />
-      </TouchableOpacity>
 
-      {/* Settings Items */}
-      <View>
+      <ScrollView style={styles.scrollView}>
+        {/* AUTOMATIONS Section */}
+        <Text style={styles.sectionHeader}>AUTOMATIONS</Text>
+
         {/* Calendar Sync */}
-        <View>
+        <View style={styles.settingsList}>
           <TouchableOpacity
-            style={styles.item}
+            style={styles.settingsItem}
             activeOpacity={0.7}
             onPress={handleCalendarSyncTap}
           >
-            <View style={styles.itemIcon}>
-              <Ionicons name="calendar-outline" size={20} color={AppColors.accentBlue} />
+            <View style={styles.itemIconContainer}>
+              <Ionicons name="calendar-outline" size={22} color={AppColors.primary} />
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.itemTitle}>Sync Trips from Calendar</Text>
-              <Text style={styles.itemSubtitle}>Import from device calendar</Text>
+            <View style={styles.itemContent}>
+              <Text style={styles.itemTitle}>Calendar Sync</Text>
             </View>
             {syncState === 'idle' && (
-              <Ionicons name="chevron-forward" size={18} color={AppColors.secondary} />
+              <Ionicons name="chevron-forward" size={20} color={AppColors.secondary} />
             )}
             {syncState === 'selecting' && (
-              <Ionicons name="chevron-down" size={18} color={AppColors.secondary} />
+              <Ionicons name="chevron-down" size={20} color={AppColors.secondary} />
             )}
             {syncState === 'syncing' && (
-              <ActivityIndicator size="small" color={AppColors.accentBlue} />
+              <ActivityIndicator size="small" color={AppColors.primary} />
             )}
           </TouchableOpacity>
 
           {/* Selecting state — calendar picker */}
           {syncState === 'selecting' && (
-            <View style={styles.syncPanel}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionLabel}>Calendars</Text>
+            <View style={styles.expandedPanel}>
+              <View style={styles.panelHeader}>
+                <Text style={styles.panelLabel}>SELECT CALENDARS</Text>
                 <TouchableOpacity onPress={handleToggleAll} activeOpacity={0.7}>
                   <Text style={styles.toggleAllText}>
                     {allSelected ? 'Unselect All' : 'Select All'}
@@ -194,32 +195,25 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
                     <Switch
                       value={selectedCalendarIds.has(cal.id)}
                       onValueChange={() => toggleCalendar(cal.id)}
-                      trackColor={{ false: AppColors.border.primary, true: AppColors.accentBlue }}
+                      trackColor={{ false: AppColors.border.primary, true: AppColors.primary }}
                     />
                   </TouchableOpacity>
                 ))}
               </ScrollView>
 
-              <Text style={[styles.sectionLabel, { marginTop: Spacing.md }]}>Scan Range</Text>
-              <View style={styles.segmentedControl}>
+              <Text style={[styles.panelLabel, { marginTop: Spacing.lg }]}>SCAN RANGE</Text>
+              <View style={styles.dropdownContainer}>
                 {SCAN_OPTIONS.map(opt => (
                   <TouchableOpacity
                     key={opt.value}
-                    style={[
-                      styles.segmentButton,
-                      scanDays === opt.value && styles.segmentButtonActive,
-                    ]}
+                    style={styles.dropdownOption}
                     onPress={() => setScanDays(opt.value)}
                     activeOpacity={0.7}
                   >
-                    <Text
-                      style={[
-                        styles.segmentLabel,
-                        scanDays === opt.value && styles.segmentLabelActive,
-                      ]}
-                    >
-                      {opt.label}
-                    </Text>
+                    <Text style={styles.dropdownOptionText}>{opt.label}</Text>
+                    {scanDays === opt.value && (
+                      <Ionicons name="checkmark" size={20} color={AppColors.primary} />
+                    )}
                   </TouchableOpacity>
                 ))}
               </View>
@@ -229,7 +223,6 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
                 activeOpacity={0.7}
                 onPress={handleSyncNow}
               >
-                <Ionicons name="sync" size={18} color={AppColors.background.primary} style={{ marginRight: 6 }} />
                 <Text style={styles.syncButtonText}>Sync Now</Text>
               </TouchableOpacity>
             </View>
@@ -237,9 +230,9 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
 
           {/* Syncing state */}
           {syncState === 'syncing' && (
-            <View style={styles.syncPanel}>
+            <View style={styles.expandedPanel}>
               <View style={styles.syncingRow}>
-                <ActivityIndicator size="small" color={AppColors.accentBlue} />
+                <ActivityIndicator size="small" color={AppColors.primary} />
                 <Text style={styles.syncingText}>Scanning events...</Text>
               </View>
             </View>
@@ -247,9 +240,9 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
 
           {/* Done state */}
           {syncState === 'done' && syncResult && (
-            <View style={styles.syncPanel}>
+            <View style={styles.expandedPanel}>
               <View style={styles.doneRow}>
-                <Ionicons name="checkmark-circle" size={22} color={AppColors.accentBlue} />
+                <Ionicons name="checkmark-circle" size={22} color={AppColors.success} />
                 <Text style={styles.doneText}>
                   Parsed {syncResult.parsed} event{syncResult.parsed !== 1 ? 's' : ''}.
                   {' '}Found {syncResult.added} trip{syncResult.added !== 1 ? 's' : ''}
@@ -261,169 +254,167 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
           )}
         </View>
 
-        {/* GTFS Refresh */}
-        <TouchableOpacity
-          style={[styles.item, { marginTop: Spacing.md }]}
-          activeOpacity={0.7}
-          onPress={onRefreshGTFS}
-        >
-          <View style={styles.itemIcon}>
-            <Ionicons name="refresh" size={20} color={AppColors.accentBlue} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.itemTitle}>Refresh Amtrak Schedule</Text>
-            <Text style={styles.itemSubtitle}>Refetch GTFS data</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={AppColors.secondary} />
-        </TouchableOpacity>
-      </View>
+        {/* DATA Section */}
+        <Text style={styles.sectionHeader}>DATA</Text>
+        <View style={styles.settingsList}>
+          <TouchableOpacity
+            style={styles.settingsItem}
+            activeOpacity={0.7}
+            onPress={onRefreshGTFS}
+          >
+            <View style={styles.itemIconContainer}>
+              <Ionicons name="refresh" size={22} color={AppColors.primary} />
+            </View>
+            <View style={styles.itemContent}>
+              <Text style={styles.itemTitle}>Refresh Amtrak Schedule</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={AppColors.secondary} />
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleRow: {
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: Spacing.lg,
+    paddingTop: Spacing.xs,
   },
   title: {
-    fontSize: FontSizes.title,
+    fontSize: 34,
     fontWeight: 'bold',
     color: AppColors.primary,
   },
   closeButton: {
-    position: 'absolute',
-    top: -12,
-    right: 0,
-    zIndex: 20,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: AppColors.background.primary,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: AppColors.background.secondary,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: AppColors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 5,
     borderWidth: 1,
     borderColor: AppColors.border.primary,
   },
-  item: {
+  scrollView: {
+    flex: 1,
+  },
+  sectionHeader: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: AppColors.secondary,
+    letterSpacing: 0.5,
+    marginTop: Spacing.lg,
+    marginBottom: Spacing.md,
+  },
+  settingsList: {
+    backgroundColor: AppColors.background.primary,
+    borderRadius: BorderRadius.md,
+    overflow: 'hidden',
+  },
+  settingsItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: BorderRadius.md,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: AppColors.border.secondary,
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: AppColors.border.primary,
   },
-  itemIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+  itemIconContainer: {
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: Spacing.md,
   },
+  itemContent: {
+    flex: 1,
+  },
   itemTitle: {
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 17,
     color: AppColors.primary,
-    marginBottom: 2,
   },
-  itemSubtitle: {
-    fontSize: 12,
-    color: AppColors.secondary,
+  // Expanded panel
+  expandedPanel: {
+    backgroundColor: AppColors.background.secondary,
+    padding: Spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: AppColors.border.primary,
   },
-  // Calendar sync panel
-  syncPanel: {
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: AppColors.border.secondary,
-    borderTopWidth: 0,
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
-    padding: 14,
-  },
-  sectionHeader: {
+  panelHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.md,
   },
-  sectionLabel: {
-    fontSize: 12,
+  panelLabel: {
+    fontSize: 11,
     fontWeight: '600',
     color: AppColors.secondary,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   toggleAllText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: AppColors.accentBlue,
+    fontSize: 15,
+    fontWeight: '600',
+    color: AppColors.primary,
   },
   calendarList: {
-    maxHeight: 180,
+    maxHeight: 200,
   },
   calendarRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: Spacing.sm,
   },
   calendarDot: {
     width: 12,
     height: 12,
     borderRadius: 6,
-    marginRight: Spacing.sm,
+    marginRight: Spacing.md,
   },
   calendarName: {
-    fontSize: 14,
+    fontSize: 15,
     color: AppColors.primary,
     fontWeight: '500',
+    marginBottom: 2,
   },
   calendarSource: {
-    fontSize: 11,
-    color: AppColors.secondary,
-  },
-  segmentedControl: {
-    flexDirection: 'row',
-    backgroundColor: AppColors.background.primary,
-    borderRadius: BorderRadius.sm,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: AppColors.border.primary,
-  },
-  segmentButton: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: 'center',
-  },
-  segmentButtonActive: {
-    backgroundColor: AppColors.accentBlue,
-  },
-  segmentLabel: {
     fontSize: 13,
-    fontWeight: '500',
     color: AppColors.secondary,
   },
-  segmentLabelActive: {
-    color: AppColors.background.primary,
+  dropdownContainer: {
+    backgroundColor: AppColors.background.primary,
+    borderRadius: BorderRadius.md,
+    overflow: 'hidden',
+    marginTop: Spacing.sm,
+  },
+  dropdownOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: AppColors.border.primary,
+  },
+  dropdownOptionText: {
+    fontSize: 17,
+    color: AppColors.primary,
   },
   syncButton: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: AppColors.accentBlue,
-    borderRadius: BorderRadius.sm,
-    paddingVertical: 10,
-    marginTop: Spacing.md,
+    backgroundColor: AppColors.primary,
+    borderRadius: BorderRadius.md,
+    paddingVertical: Spacing.md,
+    marginTop: Spacing.lg,
   },
   syncButtonText: {
-    fontSize: 14,
+    fontSize: 17,
     fontWeight: '600',
     color: AppColors.background.primary,
   },
@@ -431,22 +422,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
+    paddingVertical: Spacing.md,
   },
   syncingText: {
-    fontSize: 14,
+    fontSize: 15,
     color: AppColors.secondary,
-    marginLeft: Spacing.sm,
+    marginLeft: Spacing.md,
   },
   doneRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
+    paddingVertical: Spacing.md,
   },
   doneText: {
-    fontSize: 14,
+    fontSize: 15,
     color: AppColors.primary,
-    marginLeft: Spacing.sm,
+    marginLeft: Spacing.md,
+    flex: 1,
   },
 });

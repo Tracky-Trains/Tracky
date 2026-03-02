@@ -81,6 +81,13 @@ export class StationLoader {
   }
 
   /**
+   * Look up a station by its stop_id / code
+   */
+  getStationByCode(code: string): StationBounds | undefined {
+    return this.stations.get(code);
+  }
+
+  /**
    * Clear all data
    */
   clear(): void {
