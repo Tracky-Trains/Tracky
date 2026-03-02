@@ -206,13 +206,6 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
 
   const renderMainPage = () => (
     <>
-      <View style={styles.header}>
-        <Text style={styles.title}>Settings</Text>
-        <TouchableOpacity onPress={() => { hapticLight(); onClose(); }} style={styles.closeButton} activeOpacity={0.7}>
-          <Ionicons name="close" size={24} color={AppColors.primary} />
-        </TouchableOpacity>
-      </View>
-
       <Text style={styles.sectionHeader}>AUTOMATIONS</Text>
       <View style={styles.settingsList}>
         <TouchableOpacity style={[styles.settingsItem, styles.settingsItemLast]} activeOpacity={0.7} onPress={() => { hapticLight(); setCurrentPage('calendar'); }}>
@@ -282,12 +275,6 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
 
   const renderCalendarPage = () => (
     <>
-      <View style={styles.subPageHeader}>
-        <TouchableOpacity onPress={() => { hapticLight(); setCurrentPage('main'); setSyncState('idle'); }}>
-          <Ionicons name="chevron-back" size={28} color={AppColors.primary} />
-        </TouchableOpacity>
-        <Text style={styles.subPageTitle}>Calendar Sync</Text>
-      </View>
       {syncState === 'idle' && (
         <View style={styles.syncingRow}>
           <ActivityIndicator size="small" color={AppColors.primary} />
@@ -349,12 +336,6 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
 
   const renderUnitsPage = () => (
     <>
-      <View style={styles.subPageHeader}>
-        <TouchableOpacity onPress={() => { hapticLight(); setCurrentPage('main'); }}>
-          <Ionicons name="chevron-back" size={28} color={AppColors.primary} />
-        </TouchableOpacity>
-        <Text style={styles.subPageTitle}>Units</Text>
-      </View>
       <Text style={styles.sectionHeader}>TEMPERATURE</Text>
       <View style={styles.pillRow}>
         {TEMP_OPTIONS.map(opt => (
@@ -376,12 +357,6 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
 
   const renderAboutPage = () => (
     <>
-      <View style={styles.subPageHeader}>
-        <TouchableOpacity onPress={() => { hapticLight(); setCurrentPage('main'); }}>
-          <Ionicons name="chevron-back" size={28} color={AppColors.primary} />
-        </TouchableOpacity>
-        <Text style={styles.subPageTitle}>About This App</Text>
-      </View>
       <View style={{ marginTop: Spacing.lg }}>
         <Text style={styles.aboutText}>Tracky is a beautiful train-tracking companion for Amtrak travelers with heavy inspiration from Flighty (and much love to the devs!). Follow your train in real time, view detailed route maps, and keep a personal log of every journey you take.</Text>
         <Text style={styles.aboutText}>A <Text style={{ color: AppColors.primary }} onPress={() => Linking.openURL('https://portfolio.jasonxu.me/')}>Jason Xu</Text> project.</Text>
@@ -392,18 +367,6 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
 
   const renderDebugLogPage = () => (
     <>
-      <View style={styles.subPageHeader}>
-        <TouchableOpacity onPress={() => { hapticLight(); setCurrentPage('main'); }}>
-          <Ionicons name="chevron-back" size={28} color={AppColors.primary} />
-        </TouchableOpacity>
-        <Text style={[styles.subPageTitle, { flex: 1 }]}>Debug Log</Text>
-        <TouchableOpacity onPress={() => { hapticLight(); handleShareLogs(); }} style={styles.logHeaderButton} activeOpacity={0.7}>
-          <Ionicons name="share-outline" size={20} color={AppColors.primary} />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => { hapticLight(); handleClearLogs(); }} style={styles.logHeaderButton} activeOpacity={0.7}>
-          <Ionicons name="trash-outline" size={20} color={AppColors.error} />
-        </TouchableOpacity>
-      </View>
 
       <View style={[styles.pillRow, { marginTop: Spacing.md, flexWrap: 'wrap' }]}>
         {(['ALL', LogLevel.DEBUG, LogLevel.INFO, LogLevel.WARN, LogLevel.ERROR] as const).map(level => (
@@ -418,7 +381,7 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
             onPress={() => { hapticSelection(); setLogFilter(level); }}
             activeOpacity={0.7}
           >
-            <Text style={[styles.logFilterPillText, logFilter === level && styles.logFilterPillTextActive]}>{level}</Text>
+            <Text style={[styles.logFilterPillText, level !== 'ALL' && logFilter !== level && { color: LOG_LEVEL_COLORS[level] }, logFilter === level && styles.logFilterPillTextActive]}>{level}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -449,8 +412,54 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
     </>
   );
 
+  const renderHeader = () => {
+    if (currentPage === 'main') {
+      return (
+        <View style={styles.header}>
+          <Text style={styles.title}>Settings</Text>
+          <TouchableOpacity onPress={() => { hapticLight(); onClose(); }} style={styles.closeButton} activeOpacity={0.7}>
+            <Ionicons name="close" size={24} color={AppColors.primary} />
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    if (currentPage === 'debugLog') {
+      return (
+        <View style={styles.subPageHeader}>
+          <TouchableOpacity onPress={() => { hapticLight(); setCurrentPage('main'); }}>
+            <Ionicons name="chevron-back" size={28} color={AppColors.primary} />
+          </TouchableOpacity>
+          <Text style={[styles.subPageTitle, { flex: 1 }]}>Debug Log</Text>
+          <TouchableOpacity onPress={() => { hapticLight(); handleShareLogs(); }} style={styles.logHeaderButton} activeOpacity={0.7}>
+            <Ionicons name="share-outline" size={20} color={AppColors.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => { hapticLight(); handleClearLogs(); }} style={styles.logHeaderButton} activeOpacity={0.7}>
+            <Ionicons name="trash-outline" size={20} color={AppColors.error} />
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    const titles: Record<string, string> = { calendar: 'Calendar Sync', units: 'Units', about: 'About This App' };
+    const onBack = () => {
+      hapticLight();
+      setCurrentPage('main');
+      if (currentPage === 'calendar') setSyncState('idle');
+    };
+    return (
+      <View style={styles.subPageHeader}>
+        <TouchableOpacity onPress={onBack}>
+          <Ionicons name="chevron-back" size={28} color={AppColors.primary} />
+        </TouchableOpacity>
+        <Text style={styles.subPageTitle}>{titles[currentPage]}</Text>
+      </View>
+    );
+  };
+
   return (
     <View style={styles.modalContent}>
+      <View style={styles.fixedHeader}>
+        {renderHeader()}
+      </View>
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={{ paddingBottom: 100, paddingHorizontal: Spacing.xl }}
@@ -473,6 +482,7 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
 
 const styles = StyleSheet.create({
   modalContent: { flex: 1, marginHorizontal: -Spacing.xl },
+  fixedHeader: { paddingHorizontal: Spacing.xl, paddingBottom: Spacing.sm, backgroundColor: AppColors.background.primary },
   divider: { height: 1, backgroundColor: AppColors.border.primary, marginVertical: Spacing.md },
   subPageHeader: { flexDirection: 'row', alignItems: 'center', paddingTop: Spacing.xs, gap: Spacing.sm },
   subPageTitle: { fontSize: 34, fontWeight: 'bold', color: AppColors.primary },

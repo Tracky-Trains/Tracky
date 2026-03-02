@@ -465,7 +465,7 @@ export default function ProfileModal({ onClose, onOpenSettings }: ProfileModalPr
       {/* Scrollable Content */}
       <ScrollView
         style={{ flex: 1 }}
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={true}
         scrollEnabled={isFullscreen}
         bounces={false}
         nestedScrollEnabled={true}

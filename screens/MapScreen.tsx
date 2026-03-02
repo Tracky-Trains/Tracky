@@ -718,7 +718,7 @@ function MapScreenInner() {
       {/* Main modal - always mounted, content conditional */}
       <SlideUpModal
         ref={mainModalRef}
-        minSnapPercent={0.15}
+        minSnapPercent={0.35}
         initialSnap={savedTrains.length === 0 ? 'min' : 'half'}
         onDismiss={() => handleModalDismissed('main')}
         onSnapChange={handleSnapChange}
@@ -794,7 +794,7 @@ function MapScreenInner() {
       {/* Settings modal - always mounted, starts hidden, content conditional */}
       <SlideUpModal
         ref={settingsModalRef}
-        minSnapPercent={0.15}
+        minSnapPercent={0.50}
         initialSnap={getInitialSnap('settings')}
         startHidden
         onDismiss={() => handleModalDismissed('settings')}
