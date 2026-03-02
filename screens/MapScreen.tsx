@@ -18,6 +18,7 @@ import { light as hapticLight } from '../utils/haptics';
 import { GTFSRefreshProvider, useGTFSRefresh } from '../context/GTFSRefreshContext';
 import { ModalProvider, useModalContext } from '../context/ModalContext';
 import { TrainProvider, useTrainContext } from '../context/TrainContext';
+import { UnitsProvider } from '../context/UnitsContext';
 import { useLiveTrains } from '../hooks/useLiveTrains';
 import { useRealtime } from '../hooks/useRealtime';
 import { useBatchedItems } from '../hooks/useBatchedItems';
@@ -789,14 +790,16 @@ function MapScreenInner() {
 
 export default function MapScreen() {
   return (
-    <TrainProvider>
-      <GTFSRefreshProvider>
-        <ModalProvider>
-          <ErrorBoundary>
-            <MapScreenInner />
-          </ErrorBoundary>
-        </ModalProvider>
-      </GTFSRefreshProvider>
-    </TrainProvider>
+    <UnitsProvider>
+      <TrainProvider>
+        <GTFSRefreshProvider>
+          <ModalProvider>
+            <ErrorBoundary>
+              <MapScreenInner />
+            </ErrorBoundary>
+          </ModalProvider>
+        </GTFSRefreshProvider>
+      </TrainProvider>
+    </UnitsProvider>
   );
 }

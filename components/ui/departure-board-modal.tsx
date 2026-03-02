@@ -1,7 +1,7 @@
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import * as Haptics from 'expo-haptics';
 import { light as hapticLight, selection as hapticSelection } from '../../utils/haptics';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Dimensions,
@@ -20,8 +20,11 @@ import { AppColors, BorderRadius, Spacing } from '../../constants/theme';
 import { TrainAPIService } from '../../services/api';
 import type { Stop, Train } from '../../types/train';
 import { addDays, getStartOfDay, isSameDay } from '../../utils/date-helpers';
+import { useUnits } from '../../context/UnitsContext';
 import { logger } from '../../utils/logger';
 import { parseTimeToMinutes } from '../../utils/time-formatting';
+import { formatTemp, weatherApiTempUnit } from '../../utils/units';
+import { getWeatherCondition } from '../../utils/weather';
 import { SlideUpModalContext } from './slide-up-modal';
 import TimeDisplay from './TimeDisplay';
 
@@ -61,7 +64,7 @@ function isTrainUpcoming(
   train: Train,
   selectedDate: Date,
   stationId: string,
-  filterMode: 'all' | 'beginning' | 'terminating'
+  filterMode: 'all' | 'departing' | 'arriving'
 ): boolean {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -78,11 +81,11 @@ function isTrainUpcoming(
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
   let relevantTime: string;
-  if (filterMode === 'terminating' || train.toCode === stationId) {
-    // For terminating trains, use arrival time at this station
+  if (filterMode === 'arriving' || train.toCode === stationId) {
+    // For arriving filter or trains terminating here, use arrival time
     relevantTime = train.arriveTime;
   } else if (train.fromCode === stationId) {
-    // For beginning trains, use departure time
+    // For trains originating here, use departure time
     relevantTime = train.departTime;
   } else {
     // For passing through trains, check intermediate stops or fall back to departure
@@ -119,6 +122,33 @@ function getStationDepartureTime(train: Train, stationId: string): { time: strin
 
   // Fallback to origin departure time
   return { time: train.departTime, dayOffset: train.departDayOffset };
+}
+
+/**
+ * Get the arrival time for a specific station from a train's stops
+ * Returns the time at the station, or falls back to destination arrival time
+ */
+function getStationArrivalTime(train: Train, stationId: string): { time: string; dayOffset?: number } {
+  // If station is the destination, use arriveTime
+  if (train.toCode === stationId) {
+    return { time: train.arriveTime, dayOffset: train.arriveDayOffset };
+  }
+
+  // If station is the origin, use departTime (arrival = departure for origin)
+  if (train.fromCode === stationId) {
+    return { time: train.departTime, dayOffset: train.departDayOffset };
+  }
+
+  // Check intermediate stops for the station
+  if (train.intermediateStops) {
+    const stop = train.intermediateStops.find(s => s.code === stationId);
+    if (stop) {
+      return { time: stop.time, dayOffset: undefined };
+    }
+  }
+
+  // Fallback to destination arrival time
+  return { time: train.arriveTime, dayOffset: train.arriveDayOffset };
 }
 
 // Swipe threshold - card bounces back at 50% of reveal width
@@ -308,7 +338,9 @@ export default function DepartureBoardModal({
   const [searchQuery, setSearchQuery] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
-  const [filterMode, setFilterMode] = useState<'all' | 'beginning' | 'terminating'>('all');
+  const [filterMode, setFilterMode] = useState<'all' | 'departing' | 'arriving'>('all');
+  const [weather, setWeather] = useState<{ temp: number; icon: string } | null>(null);
+  const { tempUnit } = useUnits();
 
   const { isCollapsed, isFullscreen, scrollOffset, contentOpacity, panRef, snapToPoint } = React.useContext(SlideUpModalContext);
 
@@ -354,6 +386,55 @@ export default function DepartureBoardModal({
     fetchDepartures();
   }, [station.stop_id, selectedDate]);
 
+  // Fetch weather for station (current for today, daily forecast for future dates)
+  useEffect(() => {
+    let cancelled = false;
+    const fetchWeather = async () => {
+      try {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const selected = new Date(selectedDate);
+        selected.setHours(0, 0, 0, 0);
+        const isToday = selected.getTime() === today.getTime();
+        const unit = weatherApiTempUnit(tempUnit);
+
+        let temp: number;
+        let code: number;
+
+        if (isToday) {
+          const url = `https://api.open-meteo.com/v1/forecast?latitude=${station.stop_lat}&longitude=${station.stop_lon}&current=temperature_2m,weather_code&temperature_unit=${unit}&timezone=auto`;
+          const res = await fetch(url);
+          if (!res.ok || cancelled) return;
+          const data = await res.json();
+          temp = data.current?.temperature_2m ?? 0;
+          code = data.current?.weather_code ?? 0;
+        } else {
+          const dateStr = selected.toISOString().slice(0, 10);
+          const url = `https://api.open-meteo.com/v1/forecast?latitude=${station.stop_lat}&longitude=${station.stop_lon}&daily=temperature_2m_max,temperature_2m_min,weather_code&start_date=${dateStr}&end_date=${dateStr}&temperature_unit=${unit}&timezone=auto`;
+          const res = await fetch(url);
+          if (!res.ok || cancelled) return;
+          const data = await res.json();
+          const high = data.daily?.temperature_2m_max?.[0] ?? 0;
+          const low = data.daily?.temperature_2m_min?.[0] ?? 0;
+          temp = (high + low) / 2;
+          code = data.daily?.weather_code?.[0] ?? 0;
+        }
+
+        if (!cancelled) {
+          const info = getWeatherCondition(code);
+          setWeather({
+            temp: Math.round(temp),
+            icon: info.icon,
+          });
+        }
+      } catch {
+        // silently fail — weather is non-critical
+      }
+    };
+    fetchWeather();
+    return () => { cancelled = true; };
+  }, [station.stop_id, station.stop_lat, station.stop_lon, tempUnit, selectedDate]);
+
   // Filter departures based on search, date, and filter mode
   const filteredDepartures = useMemo(() => {
     const filtered = departures.filter(train => {
@@ -362,14 +443,14 @@ export default function DepartureBoardModal({
         return false;
       }
 
-      // Filter by beginning/terminating mode
+      // Filter by departing/arriving mode
       if (filterMode !== 'all') {
-        // For beginning: only show trains where this station is the origin
-        const isBeginning = train.fromCode === station.stop_id;
-        // For terminating: only show trains where this station is the final destination
-        const isTerminating = train.toCode === station.stop_id;
-        if (filterMode === 'beginning' && !isBeginning) return false;
-        if (filterMode === 'terminating' && !isTerminating) return false;
+        // For departing: show trains that depart from this station (not terminating here)
+        const isDeparting = train.toCode !== station.stop_id;
+        // For arriving: show trains that arrive at this station (not originating here)
+        const isArriving = train.fromCode !== station.stop_id;
+        if (filterMode === 'departing' && !isDeparting) return false;
+        if (filterMode === 'arriving' && !isArriving) return false;
       }
 
       // Filter by search query (destination, train number, route name)
@@ -396,23 +477,21 @@ export default function DepartureBoardModal({
 
     // Sort based on filter mode
     return filtered.sort((a, b) => {
-      if (filterMode === 'terminating') {
+      if (filterMode === 'arriving') {
         // Sort by arrival time at this station
-        const aMinutes = parseTimeToMinutes(a.arriveTime);
-        const bMinutes = parseTimeToMinutes(b.arriveTime);
-        return aMinutes - bMinutes;
-      } else if (filterMode === 'beginning') {
-        // Sort by departure time (this station is the origin)
-        const aMinutes = parseTimeToMinutes(a.departTime);
-        const bMinutes = parseTimeToMinutes(b.departTime);
-        return aMinutes - bMinutes;
+        const aTime = getStationArrivalTime(a, station.stop_id);
+        const bTime = getStationArrivalTime(b, station.stop_id);
+        return parseTimeToMinutes(aTime.time) - parseTimeToMinutes(bTime.time);
+      } else if (filterMode === 'departing') {
+        // Sort by departure time from this station
+        const aTime = getStationDepartureTime(a, station.stop_id);
+        const bTime = getStationDepartureTime(b, station.stop_id);
+        return parseTimeToMinutes(aTime.time) - parseTimeToMinutes(bTime.time);
       } else {
         // 'all' mode: sort by the time at this station
         const aTime = getStationDepartureTime(a, station.stop_id);
         const bTime = getStationDepartureTime(b, station.stop_id);
-        const aMinutes = parseTimeToMinutes(aTime.time);
-        const bMinutes = parseTimeToMinutes(bTime.time);
-        return aMinutes - bMinutes;
+        return parseTimeToMinutes(aTime.time) - parseTimeToMinutes(bTime.time);
       }
     });
   }, [departures, selectedDate, searchQuery, filterMode, station.stop_id]);
@@ -459,34 +538,38 @@ export default function DepartureBoardModal({
 
   const handleTrainPress = useCallback(
     (train: Train) => {
-      // For terminating: keep original origin, set destination to this station
-      // For beginning/all: set origin to this station, keep original destination
-      // Also update the departure/arrival times to match the station
-      const stationTime = getStationDepartureTime(train, station.stop_id);
-      const updatedTrain: Train =
-        filterMode === 'terminating'
-          ? {
-              ...train,
-              // Explicitly preserve the original origin
-              fromCode: train.fromCode,
-              from: train.from,
-              // Set destination to this station
-              toCode: station.stop_id,
-              to: station.stop_name,
-              arriveTime: stationTime.time,
-              arriveDayOffset: stationTime.dayOffset,
-            }
-          : {
-              ...train,
-              // Set origin to this station
-              fromCode: station.stop_id,
-              from: station.stop_name,
-              departTime: stationTime.time,
-              departDayOffset: stationTime.dayOffset,
-              // Explicitly preserve the original destination
-              toCode: train.toCode,
-              to: train.to,
-            };
+      const isTerminatingHere = train.toCode === station.stop_id;
+      const isOriginatingHere = train.fromCode === station.stop_id;
+
+      let updatedTrain: Train;
+      if (isOriginatingHere && isTerminatingHere) {
+        // Train both starts and ends here (shouldn't happen, but be safe)
+        updatedTrain = { ...train };
+      } else if (filterMode === 'arriving' || (!isOriginatingHere && isTerminatingHere)) {
+        // Arriving at this station: keep original origin, set destination to this station
+        const arrivalTime = getStationArrivalTime(train, station.stop_id);
+        updatedTrain = {
+          ...train,
+          fromCode: train.fromCode,
+          from: train.from,
+          toCode: station.stop_id,
+          to: station.stop_name,
+          arriveTime: arrivalTime.time,
+          arriveDayOffset: arrivalTime.dayOffset,
+        };
+      } else {
+        // Departing or passing through: set origin to this station, keep original destination
+        const departTime = getStationDepartureTime(train, station.stop_id);
+        updatedTrain = {
+          ...train,
+          fromCode: station.stop_id,
+          from: station.stop_name,
+          departTime: departTime.time,
+          departDayOffset: departTime.dayOffset,
+          toCode: train.toCode,
+          to: train.to,
+        };
+      }
       onTrainSelect(updatedTrain);
     },
     [station, onTrainSelect, filterMode]
@@ -499,7 +582,16 @@ export default function DepartureBoardModal({
         {/* Header - Title and close button */}
         <View style={styles.header}>
           <View style={styles.headerTextContainer}>
-            <Text style={styles.headerSubtitle}>{station.stop_id}</Text>
+            <View style={styles.headerSubtitleRow}>
+              <Text style={styles.headerSubtitle}>{station.stop_id}</Text>
+              {weather && (
+                <View style={styles.weatherBadge}>
+                  <Text style={styles.weatherDot}> • </Text>
+                  <Ionicons name={weather.icon as any} size={14} color={AppColors.secondary} />
+                  <Text style={styles.weatherTemp}> {weather.temp}°{tempUnit}</Text>
+                </View>
+              )}
+            </View>
             <Text style={styles.headerTitle} numberOfLines={1}>
               {station.stop_name}
             </Text>
@@ -564,29 +656,29 @@ export default function DepartureBoardModal({
                 <Text style={[styles.filterText, filterMode === 'all' && styles.filterTextActive]}>All</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.filterButton, filterMode === 'beginning' && styles.filterButtonActive]}
-                onPress={() => { hapticSelection(); setFilterMode('beginning'); }}
+                style={[styles.filterButton, filterMode === 'departing' && styles.filterButtonActive]}
+                onPress={() => { hapticSelection(); setFilterMode('departing'); }}
                 activeOpacity={0.7}
               >
                 <MaterialCommunityIcons
                   name="arrow-top-right"
                   size={18}
-                  color={filterMode === 'beginning' ? AppColors.primary : AppColors.tertiary}
+                  color={filterMode === 'departing' ? AppColors.primary : AppColors.tertiary}
                 />
               </TouchableOpacity>
               <TouchableOpacity
                 style={[
                   styles.filterButton,
                   styles.filterButtonRight,
-                  filterMode === 'terminating' && styles.filterButtonActive,
+                  filterMode === 'arriving' && styles.filterButtonActive,
                 ]}
-                onPress={() => { hapticSelection(); setFilterMode('terminating'); }}
+                onPress={() => { hapticSelection(); setFilterMode('arriving'); }}
                 activeOpacity={0.7}
               >
                 <MaterialCommunityIcons
                   name="arrow-bottom-left"
                   size={18}
-                  color={filterMode === 'terminating' ? AppColors.primary : AppColors.tertiary}
+                  color={filterMode === 'arriving' ? AppColors.primary : AppColors.tertiary}
                 />
               </TouchableOpacity>
             </View>
@@ -642,25 +734,25 @@ export default function DepartureBoardModal({
               <Text style={styles.emptyText}>
                 {searchQuery
                   ? 'No trains match your search'
-                  : filterMode === 'beginning'
-                    ? 'No trains found beginning at this station'
-                    : filterMode === 'terminating'
-                      ? 'No trains found terminating at this station'
+                  : filterMode === 'departing'
+                    ? 'No departing trains found'
+                    : filterMode === 'arriving'
+                      ? 'No arriving trains found'
                       : 'No trains found for this station'}
               </Text>
             </View>
           ) : (
             <View style={styles.departuresList}>
               <Text style={styles.sectionTitle}>
-                {filterMode === 'terminating' ? 'Terminating' : filterMode === 'beginning' ? 'Beginning' : 'All Trains'}{' '}
+                {filterMode === 'arriving' ? 'Arriving' : filterMode === 'departing' ? 'Departing' : 'All Trains'}{' '}
                 ({filteredDepartures.length})
               </Text>
               {filteredDepartures.map((train, index) => {
                 if (!train || !train.departTime) return null;
-                // Get the correct time for this station (not the origin's departure time)
+                // Get the correct time for this station based on filter mode
                 const stationTime =
-                  filterMode === 'terminating'
-                    ? { time: train.arriveTime, dayOffset: train.arriveDayOffset }
+                  filterMode === 'arriving'
+                    ? getStationArrivalTime(train, station.stop_id)
                     : getStationDepartureTime(train, station.stop_id);
                 return (
                   <SwipeableDepartureItem
@@ -709,10 +801,27 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 48 + Spacing.md,
   },
+  headerSubtitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
   headerSubtitle: {
     fontSize: 14,
     color: AppColors.secondary,
-    marginBottom: 2,
+  },
+  weatherBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  weatherDot: {
+    fontSize: 14,
+    color: AppColors.tertiary,
+  },
+  weatherTemp: {
+    fontSize: 14,
+    color: AppColors.secondary,
+    fontWeight: '500',
   },
   headerTitle: {
     fontSize: 22,

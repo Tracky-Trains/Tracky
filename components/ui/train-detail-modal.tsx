@@ -1,18 +1,22 @@
 import React from 'react';
-import { Dimensions, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Dimensions, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppColors, Spacing } from '../../constants/theme';
-import { addDelayToTime, formatTimeWithDayOffset, timeToMinutes } from '../../utils/time-formatting';
+import { formatTimeWithDayOffset, timeToMinutes } from '../../utils/time-formatting';
 
 import { useTrainContext } from '../../context/TrainContext';
+import { useUnits } from '../../context/UnitsContext';
+import { TrainStorageService } from '../../services/storage';
 import type { Train } from '../../types/train';
 import { haversineDistance } from '../../utils/distance';
 import { gtfsParser } from '../../utils/gtfs-parser';
 import { logger } from '../../utils/logger';
 import { calculateDuration, getCountdownForTrain, pluralize } from '../../utils/train-display';
+import { convertDistance, distanceSuffix, formatTemp, weatherApiTempUnit } from '../../utils/units';
+import { getWeatherCondition } from '../../utils/weather';
 import { SlideUpModalContext } from './slide-up-modal';
 import TimeDisplay from './TimeDisplay';
 
@@ -30,133 +34,60 @@ interface TrainDetailModalProps {
   onTrainSelect?: (train: Train) => void;
 }
 
-// formatTime24to12, addDelayToTime, and timeToMinutes are now imported from utils/time-formatting
 const formatTime24to12 = formatTimeWithDayOffset;
 
-import { Alert } from 'react-native';
-
-// Weather interface for arrival weather widget
 interface WeatherData {
   temperature: number;
   condition: string;
   icon: string;
 }
 
-export default function TrainDetailModal({ train, onClose, onStationSelect, onTrainSelect }: TrainDetailModalProps) {
-  // Use context if train is not provided
-  const { selectedTrain } = useTrainContext();
-  const trainData = train || selectedTrain;
-  const [intermediateStops, setIntermediateStops] = React.useState<
-    { time: string; dayOffset: number; name: string; code: string }[]
-  >([]);
-  const [error, setError] = React.useState<string | null>(null);
+interface StopInfo {
+  time: string;
+  dayOffset: number;
+  name: string;
+  code: string;
+}
 
-  // For live trains: track past stops, next stop, and future stops
-  const [allStops, setAllStops] = React.useState<{ time: string; dayOffset: number; name: string; code: string }[]>([]);
+export default function TrainDetailModal({ train, onClose, onStationSelect, onTrainSelect }: TrainDetailModalProps) {
+  const { selectedTrain } = useTrainContext();
+  const { tempUnit, distanceUnit } = useUnits();
+  const trainData = train || selectedTrain;
+  
+  const [allStops, setAllStops] = React.useState<StopInfo[]>([]);
   const [isWhereIsMyTrainExpanded, setIsWhereIsMyTrainExpanded] = React.useState(false);
   const [isHeaderExpanded, setIsHeaderExpanded] = React.useState(false);
-  
-  // Weather state
   const [weatherData, setWeatherData] = React.useState<WeatherData | null>(null);
   const [isLoadingWeather, setIsLoadingWeather] = React.useState(false);
+  const [routeHistory, setRouteHistory] = React.useState<{ trips: number; distance: number; duration: number } | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+  const [stopWeather, setStopWeather] = React.useState<Record<string, { temp: number; icon: string }>>({});
+  const stopWeatherKeyRef = React.useRef<string | null>(null);
 
-  // Check if train is currently live (has realtime position)
   const isLiveTrain = trainData?.realtime?.position !== undefined;
 
-  // Base day offset for the segment - used to localize times relative to segment departure
-  const [segmentBaseDayOffset, setSegmentBaseDayOffset] = React.useState(0);
-  // Actual day offsets from GTFS for segment endpoints (more reliable than trainData which may be undefined)
-  const [segmentDepartDayOffset, setSegmentDepartDayOffset] = React.useState(0);
-  const [segmentArriveDayOffset, setSegmentArriveDayOffset] = React.useState(0);
-
+  // Load stops from GTFS
   React.useEffect(() => {
-    if (!trainData) return;
-    if (trainData.tripId) {
-      try {
-        const stops = gtfsParser.getStopTimesForTrip(trainData.tripId);
-        if (stops && stops.length > 0) {
-          // Store all stops for the full route (for live trains)
-          const allFormattedStops = stops.map(stop => {
-            const formatted = stop.departure_time ? formatTime24to12(stop.departure_time) : { time: '', dayOffset: 0 };
-            return {
-              time: formatted.time,
-              dayOffset: formatted.dayOffset,
-              name: stop.stop_name,
-              code: stop.stop_id,
-            };
-          });
-          setAllStops(allFormattedStops);
-
-          // Find the indices of the user's selected segment
-          const fromIdx = stops.findIndex(s => s.stop_id === trainData.fromCode);
-          const toIdx = stops.findIndex(s => s.stop_id === trainData.toCode);
-
-          if (fromIdx !== -1 && toIdx !== -1 && fromIdx < toIdx) {
-            // Calculate base day offset from the segment's departure station
-            const fromStop = stops[fromIdx];
-            const toStop = stops[toIdx];
-            const fromFormatted = fromStop.departure_time
-              ? formatTime24to12(fromStop.departure_time)
-              : { time: '', dayOffset: 0 };
-            const toFormatted = toStop.arrival_time
-              ? formatTime24to12(toStop.arrival_time)
-              : { time: '', dayOffset: 0 };
-
-            setSegmentBaseDayOffset(fromFormatted.dayOffset);
-            setSegmentDepartDayOffset(fromFormatted.dayOffset);
-            setSegmentArriveDayOffset(toFormatted.dayOffset);
-
-            // Only show stops between from and to (exclusive of endpoints)
-            // Day offsets are localized relative to segment departure
-            const segmentStops = stops.slice(fromIdx + 1, toIdx);
-            setIntermediateStops(
-              segmentStops.map(stop => {
-                const formatted = stop.departure_time
-                  ? formatTime24to12(stop.departure_time)
-                  : { time: '', dayOffset: 0 };
-                return {
-                  time: formatted.time,
-                  dayOffset: formatted.dayOffset - fromFormatted.dayOffset, // Localize to segment
-                  name: stop.stop_name,
-                  code: stop.stop_id,
-                };
-              })
-            );
-          } else {
-            // Fallback: show all intermediate stops if segment not found
-            setSegmentBaseDayOffset(0);
-            setSegmentDepartDayOffset(0);
-            setSegmentArriveDayOffset(0);
-            setIntermediateStops(
-              stops.slice(1, -1).map(stop => {
-                const formatted = stop.departure_time
-                  ? formatTime24to12(stop.departure_time)
-                  : { time: '', dayOffset: 0 };
-                return {
-                  time: formatted.time,
-                  dayOffset: formatted.dayOffset,
-                  name: stop.stop_name,
-                  code: stop.stop_id,
-                };
-              })
-            );
-          }
-        } else {
-          setError('No intermediate stops found in GTFS data for this train.');
-        }
-      } catch (e) {
-        setError('Failed to load stops from GTFS data.');
+    if (!trainData?.tripId) return;
+    
+    try {
+      const stops = gtfsParser.getStopTimesForTrip(trainData.tripId);
+      if (stops && stops.length > 0) {
+        const formattedStops = stops.map(stop => {
+          const formatted = stop.departure_time ? formatTime24to12(stop.departure_time) : { time: '', dayOffset: 0 };
+          return {
+            time: formatted.time,
+            dayOffset: formatted.dayOffset,
+            name: stop.stop_name,
+            code: stop.stop_id,
+          };
+        });
+        setAllStops(formattedStops);
       }
-    } else {
-      setError('No trip ID available for this train.');
+    } catch (e) {
+      logger.error('Failed to load stops:', e);
     }
   }, [trainData]);
-
-  React.useEffect(() => {
-    if (error) {
-      Alert.alert('Error', error, [{ text: 'OK', onPress: onClose }]);
-    }
-  }, [error, onClose]);
 
   // Fetch weather data for destination
   React.useEffect(() => {
@@ -168,25 +99,12 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
         const destStop = gtfsParser.getStop(trainData.toCode);
         if (!destStop) return;
 
-        // Using Open-Meteo API (free, no API key required)
-        const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${destStop.stop_lat}&longitude=${destStop.stop_lon}&current=temperature_2m,weather_code&temperature_unit=fahrenheit&timezone=auto`;
+        const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${destStop.stop_lat}&longitude=${destStop.stop_lon}&current=temperature_2m,weather_code&temperature_unit=${weatherApiTempUnit(tempUnit)}&timezone=auto`;
         const response = await fetch(weatherUrl);
-        
+
         if (response.ok) {
           const data = await response.json();
           const weatherCode = data.current?.weather_code || 0;
-          
-          // Map weather codes to conditions
-          const getWeatherCondition = (code: number): { condition: string; icon: string } => {
-            if (code === 0) return { condition: 'Clear', icon: 'sunny' };
-            if (code <= 3) return { condition: 'Partly Cloudy', icon: 'partly-sunny' };
-            if (code <= 48) return { condition: 'Foggy', icon: 'cloud' };
-            if (code <= 67) return { condition: 'Rainy', icon: 'rainy' };
-            if (code <= 77) return { condition: 'Snowy', icon: 'snow' };
-            if (code <= 99) return { condition: 'Stormy', icon: 'thunderstorm' };
-            return { condition: 'Scattered Clouds', icon: 'cloud' };
-          };
-
           const weatherInfo = getWeatherCondition(weatherCode);
           setWeatherData({
             temperature: Math.round(data.current?.temperature_2m || 0),
@@ -202,152 +120,237 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
     };
 
     fetchWeather();
+  }, [trainData, tempUnit]);
+
+  // Fetch hourly weather for each stop when "Where's My Train?" is expanded
+  React.useEffect(() => {
+    if (!isWhereIsMyTrainExpanded || allStops.length === 0 || !trainData) return;
+
+    const key = `${trainData.tripId}-${allStops.length}-${tempUnit}`;
+    if (stopWeatherKeyRef.current === key) return;
+    stopWeatherKeyRef.current = key;
+
+    let cancelled = false;
+
+    const fetchAllStopWeather = async () => {
+      const unit = weatherApiTempUnit(tempUnit);
+      const today = new Date();
+      const baseDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const results: Record<string, { temp: number; icon: string }> = {};
+
+      const promises = allStops.map(async (stop) => {
+        try {
+          const stopData = gtfsParser.getStop(stop.code);
+          if (!stopData) return;
+
+          const targetDate = new Date(baseDate);
+          targetDate.setDate(targetDate.getDate() + stop.dayOffset);
+          const dateStr = targetDate.toISOString().slice(0, 10);
+          const hour = Math.min(Math.floor(timeToMinutes(stop.time) / 60), 23);
+
+          const url = `https://api.open-meteo.com/v1/forecast?latitude=${stopData.stop_lat}&longitude=${stopData.stop_lon}&hourly=temperature_2m,weather_code&temperature_unit=${unit}&timezone=auto&start_date=${dateStr}&end_date=${dateStr}`;
+          const res = await fetch(url);
+          if (!res.ok || cancelled) return;
+          const data = await res.json();
+
+          const temp = data.hourly?.temperature_2m?.[hour];
+          const code = data.hourly?.weather_code?.[hour];
+          if (temp != null && code != null) {
+            const info = getWeatherCondition(code);
+            results[stop.code] = { temp: Math.round(temp), icon: info.icon };
+          }
+        } catch {
+          // silently fail per stop
+        }
+      });
+
+      await Promise.all(promises);
+      if (!cancelled) setStopWeather(results);
+    };
+
+    fetchAllStopWeather();
+    return () => { cancelled = true; };
+  }, [isWhereIsMyTrainExpanded, allStops, trainData, tempUnit]);
+
+  // Fetch route history stats
+  React.useEffect(() => {
+    const fetchRouteHistory = async () => {
+      if (!trainData) return;
+      
+      try {
+        const history = await TrainStorageService.getTripHistory();
+        const matchingTrips = history.filter(
+          trip => trip.fromCode === trainData.fromCode && trip.toCode === trainData.toCode
+        );
+        
+        const totalDistance = matchingTrips.reduce((sum, trip) => sum + (trip.distance || 0), 0);
+        const totalDuration = matchingTrips.reduce((sum, trip) => sum + (trip.duration || 0), 0);
+        
+        setRouteHistory({
+          trips: matchingTrips.length,
+          distance: Math.round(totalDistance),
+          duration: Math.round(totalDuration),
+        });
+      } catch (e) {
+        logger.error('Failed to fetch route history:', e);
+        setRouteHistory(null);
+      }
+    };
+
+    fetchRouteHistory();
   }, [trainData]);
 
+  // Fetch weather for each stop when "Where's My Train?" is expanded
+  React.useEffect(() => {
+    if (!isWhereIsMyTrainExpanded || !trainData?.tripId) return;
 
-  // Use context from SlideUpModal for proper scroll/gesture coordination
+    const cacheKey = `${trainData.tripId}-${tempUnit}`;
+    if (stopWeatherKeyRef.current === cacheKey) return;
+    stopWeatherKeyRef.current = cacheKey;
+
+    let cancelled = false;
+
+    const fetchStopWeather = async () => {
+      try {
+        const stops = gtfsParser.getStopTimesForTrip(trainData.tripId);
+        if (!stops || stops.length === 0) return;
+
+        const unit = weatherApiTempUnit(tempUnit);
+        const baseDate = new Date();
+        const results: Record<string, { temp: number; icon: string }> = {};
+
+        await Promise.all(
+          stops.map(async (stop) => {
+            try {
+              const stopData = gtfsParser.getStop(stop.stop_id);
+              if (!stopData) return;
+
+              const time = stop.departure_time || stop.arrival_time;
+              const timeParts = time?.split(':');
+              if (!timeParts) return;
+              let hour = parseInt(timeParts[0]);
+              const dayOff = Math.floor(hour / 24);
+              hour = hour % 24;
+
+              const stopDate = new Date(baseDate);
+              stopDate.setDate(stopDate.getDate() + dayOff);
+              const dateStr = stopDate.toISOString().slice(0, 10);
+
+              const url = `https://api.open-meteo.com/v1/forecast?latitude=${stopData.stop_lat}&longitude=${stopData.stop_lon}&hourly=temperature_2m,weather_code&start_date=${dateStr}&end_date=${dateStr}&temperature_unit=${unit}&timezone=auto`;
+
+              const res = await fetch(url);
+              if (!res.ok || cancelled) return;
+              const data = await res.json();
+
+              const hourIndex = Math.min(hour, (data.hourly?.temperature_2m?.length || 1) - 1);
+              const temp = data.hourly?.temperature_2m?.[hourIndex];
+              const code = data.hourly?.weather_code?.[hourIndex] ?? 0;
+
+              if (temp != null) {
+                const info = getWeatherCondition(code);
+                results[stop.stop_id] = {
+                  temp: Math.round(temp),
+                  icon: info.icon,
+                };
+              }
+            } catch {
+              // skip individual stop
+            }
+          })
+        );
+
+        if (!cancelled) {
+          setStopWeather(results);
+        }
+      } catch {
+        // silently fail — weather is non-critical
+      }
+    };
+
+    fetchStopWeather();
+    return () => { cancelled = true; };
+  }, [isWhereIsMyTrainExpanded, trainData?.tripId, tempUnit]);
+
+  // Get timezone info for origin and destination
+  const timezoneInfo = React.useMemo(() => {
+    if (!trainData || allStops.length === 0) return null;
+    
+    try {
+      const originStop = gtfsParser.getStop(trainData.fromCode);
+      const destStop = gtfsParser.getStop(trainData.toCode);
+      
+      const originTz = originStop?.stop_timezone;
+      const destTz = destStop?.stop_timezone;
+      
+      if (originTz && destTz && originTz !== destTz) {
+        // Calculate timezone offset difference
+        const now = new Date();
+        const formatter = new Intl.DateTimeFormat('en-US', { 
+          timeZone: originTz, 
+          timeZoneName: 'shortOffset' 
+        });
+        const originOffset = formatter.formatToParts(now).find(p => p.type === 'timeZoneName')?.value;
+        
+        const formatter2 = new Intl.DateTimeFormat('en-US', { 
+          timeZone: destTz, 
+          timeZoneName: 'shortOffset' 
+        });
+        const destOffset = formatter2.formatToParts(now).find(p => p.type === 'timeZoneName')?.value;
+        
+        // Parse offsets like "GMT-5" to get the hour difference
+        let hourDiff = 0;
+        if (originOffset && destOffset) {
+          const parseOffset = (offset: string) => {
+            const match = offset.match(/GMT([+-]\d+)/);
+            return match ? parseInt(match[1]) : 0;
+          };
+          const originHours = parseOffset(originOffset);
+          const destHours = parseOffset(destOffset);
+          hourDiff = destHours - originHours;
+        }
+        
+        const sign = hourDiff > 0 ? '+' : '';
+        return {
+          hasChange: true,
+          message: `${sign}${hourDiff} hour${Math.abs(hourDiff) !== 1 ? 's' : ''} between stations`,
+        };
+      }
+      
+      return {
+        hasChange: false,
+        message: 'Both stations are in the same timezone',
+      };
+    } catch (e) {
+      return null;
+    }
+  }, [trainData, allStops]);
+
   const { isCollapsed, isFullscreen, scrollOffset, contentOpacity, panRef } = React.useContext(SlideUpModalContext);
   const [isScrolled, setIsScrolled] = React.useState(false);
 
-  // Animated style for content that fades between half and collapsed states
   const fadeAnimatedStyle = useAnimatedStyle(() => {
     return {
       opacity: contentOpacity.value,
     };
   });
 
-  // Check if modal is at half height (not collapsed and not fullscreen)
   const isHalfHeight = !isCollapsed && !isFullscreen;
-  // Calculate journey duration from departure to arrival
   const duration = trainData ? calculateDuration(trainData.departTime, trainData.arriveTime) : '';
 
-  // Calculate distance using station coordinates
   let distanceMiles: number | null = null;
   if (trainData) {
     try {
       const fromStop = gtfsParser.getStop(trainData.fromCode);
       const toStop = gtfsParser.getStop(trainData.toCode);
-      distanceMiles = haversineDistance(fromStop.stop_lat, fromStop.stop_lon, toStop.stop_lat, toStop.stop_lon);
+      if (fromStop && toStop) {
+        distanceMiles = haversineDistance(fromStop.stop_lat, fromStop.stop_lon, toStop.stop_lat, toStop.stop_lon);
+      }
     } catch {}
   }
 
-  // Countdown logic (shared with TrainList)
   const countdown = trainData ? getCountdownForTrain(trainData) : null;
   const unitLabel = countdown ? `${countdown.unit}${countdown.past ? ' AGO' : ''}` : '';
 
-  // For live trains: find the next stop based on current time
-  const { pastStops, nextStop, futureStops, originStop } = React.useMemo(() => {
-    if (!isLiveTrain || allStops.length === 0) {
-      return { pastStops: [], nextStop: null, futureStops: [], originStop: null };
-    }
-
-    const now = new Date();
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
-    // Find the first stop that hasn't happened yet
-    let nextStopIndex = -1;
-    for (let i = 0; i < allStops.length; i++) {
-      const stopMinutes = timeToMinutes(allStops[i].time);
-      // Account for day offset - if stop is next day, add 24 hours
-      const adjustedStopMinutes = stopMinutes + allStops[i].dayOffset * 24 * 60;
-      const adjustedCurrentMinutes = currentMinutes;
-
-      if (adjustedStopMinutes > adjustedCurrentMinutes) {
-        nextStopIndex = i;
-        break;
-      }
-    }
-
-    // If no future stop found, train has completed its journey
-    if (nextStopIndex === -1) {
-      return {
-        pastStops: allStops.slice(0, -1),
-        nextStop: allStops[allStops.length - 1],
-        futureStops: [],
-        originStop: allStops[0],
-      };
-    }
-
-    return {
-      pastStops: allStops.slice(0, nextStopIndex),
-      nextStop: allStops[nextStopIndex],
-      futureStops: allStops.slice(nextStopIndex + 1),
-      originStop: allStops[0],
-    };
-  }, [isLiveTrain, allStops]);
-
-  // For live trains: calculate remaining stops count
-  const remainingStopsCount = futureStops.length;
-  const pastStopsCount = pastStops.length;
-
-  // For live trains: calculate remaining duration and distance (from next stop to final destination)
-  const { remainingDuration, remainingDistanceMiles } = React.useMemo(() => {
-    if (!isLiveTrain || !nextStop || allStops.length === 0) {
-      return { remainingDuration: duration, remainingDistanceMiles: distanceMiles };
-    }
-
-    const finalStop = allStops[allStops.length - 1];
-
-    // Calculate remaining duration from next stop to final destination
-    const remDuration = calculateDuration(nextStop.time, finalStop.time);
-
-    // Calculate remaining distance from next stop to final destination
-    let remDistance: number | null = null;
-    try {
-      const nextStopData = gtfsParser.getStop(nextStop.code);
-      const finalStopData = gtfsParser.getStop(finalStop.code);
-      if (nextStopData && finalStopData) {
-        remDistance = haversineDistance(
-          nextStopData.stop_lat,
-          nextStopData.stop_lon,
-          finalStopData.stop_lat,
-          finalStopData.stop_lon
-        );
-      }
-    } catch {}
-
-    return { remainingDuration: remDuration, remainingDistanceMiles: remDistance };
-  }, [isLiveTrain, nextStop, allStops, duration, distanceMiles]);
-
-  // Check if the saved route is a segment (user's from/to don't match full route origin/destination)
-  const isSegment = React.useMemo(() => {
-    if (allStops.length < 2 || !trainData) return false;
-    const fullRouteOrigin = allStops[0].code;
-    const fullRouteDestination = allStops[allStops.length - 1].code;
-    return trainData.fromCode !== fullRouteOrigin || trainData.toCode !== fullRouteDestination;
-  }, [allStops, trainData]);
-
-  // Calculate full route duration and distance (for segments)
-  const { fullRouteDuration, fullRouteDistanceMiles } = React.useMemo(() => {
-    if (allStops.length < 2) {
-      return { fullRouteDuration: duration, fullRouteDistanceMiles: distanceMiles };
-    }
-
-    const originStop = allStops[0];
-    const finalStop = allStops[allStops.length - 1];
-
-    // Calculate full route duration
-    const fullDuration = calculateDuration(originStop.time, finalStop.time);
-
-    // Calculate full route distance
-    let fullDistance: number | null = null;
-    try {
-      const originStopData = gtfsParser.getStop(originStop.code);
-      const finalStopData = gtfsParser.getStop(finalStop.code);
-      if (originStopData && finalStopData) {
-        fullDistance = haversineDistance(
-          originStopData.stop_lat,
-          originStopData.stop_lon,
-          finalStopData.stop_lat,
-          finalStopData.stop_lon
-        );
-      }
-    } catch {}
-
-    return { fullRouteDuration: fullDuration, fullRouteDistanceMiles: fullDistance };
-  }, [allStops, duration, distanceMiles]);
-
-  // Handle station selection - get coordinates and call callback
   const handleStationPress = (stationCode: string) => {
     if (!onStationSelect) return;
     try {
@@ -360,8 +363,24 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
     }
   };
 
-  // If no train data or error, still show a close button so the user can exit
-  if (!trainData || error) {
+  // Find next stop for live trains
+  const nextStopIndex = React.useMemo(() => {
+    if (!isLiveTrain || allStops.length === 0) return -1;
+    
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    for (let i = 0; i < allStops.length; i++) {
+      const stopMinutes = timeToMinutes(allStops[i].time);
+      const adjustedStopMinutes = stopMinutes + allStops[i].dayOffset * 24 * 60;
+      if (adjustedStopMinutes > currentMinutes) {
+        return i;
+      }
+    }
+    return -1;
+  }, [isLiveTrain, allStops]);
+
+  if (!trainData) {
     return (
       <View style={styles.modalContent}>
         <View style={[styles.header]}>
@@ -376,34 +395,24 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
 
   return (
     <View style={styles.modalContent}>
-      {/* Header - Fixed outside ScrollView */}
+      {/* Header */}
       <View style={[styles.header, isScrolled && styles.headerScrolled]}>
         <View style={styles.headerContent}>
           <Image source={require('../../assets/images/amtrak.png')} style={styles.headerLogo} fadeDuration={0} />
           <View style={styles.headerTextContainer}>
             <View style={styles.headerTop}>
               <Text style={styles.headerTitle} numberOfLines={1}>
-                {trainData.routeName ? trainData.routeName : trainData.operator} {trainData.trainNumber} •{' '}
-                {trainData.date}
+                {trainData.routeName || trainData.operator} {trainData.trainNumber} • {trainData.date}
               </Text>
             </View>
             <TouchableOpacity
               onPress={() => !isCollapsed && setIsHeaderExpanded(!isHeaderExpanded)}
               activeOpacity={isCollapsed ? 1 : 0.7}
             >
-              {isCollapsed ? (
-                // When modal is collapsed, always show short format
-                <Text style={styles.routeTitle} numberOfLines={1}>
-                  {trainData.fromCode} to {trainData.toCode}
-                </Text>
-              ) : isHeaderExpanded ? (
+              {isHeaderExpanded ? (
                 <>
-                  <Text style={styles.routeTitle}>
-                    {trainData.from}
-                  </Text>
-                  <Text style={styles.routeTitle}>
-                    to {trainData.to}
-                  </Text>
+                  <Text style={styles.routeTitle}>{trainData.from}</Text>
+                  <Text style={styles.routeTitle}>to {trainData.to}</Text>
                 </>
               ) : (
                 <Text style={styles.routeTitle} numberOfLines={1}>
@@ -413,13 +422,12 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
             </TouchableOpacity>
           </View>
         </View>
-        {/* Absolutely positioned close button */}
         <TouchableOpacity onPress={onClose} style={styles.absoluteCloseButton} activeOpacity={0.6}>
           <Ionicons name="close" size={24} color={COLORS.primary} />
         </TouchableOpacity>
       </View>
 
-      {/* Collapsed: only header visible - content fades between half and collapsed */}
+      {/* Content */}
       <Animated.View style={[{ flex: 1 }, fadeAnimatedStyle]} pointerEvents={isCollapsed ? 'none' : 'auto'}>
         <ScrollView
           style={styles.scrollContent}
@@ -436,570 +444,292 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
           bounces={false}
           nestedScrollEnabled={true}
         >
-          {/* Departs in (granular, like card) */}
-          {countdown && <View style={styles.fullWidthLine} />}
+          {/* Countdown Section */}
           {countdown && (
-            <View style={styles.departsSection}>
-              <Text style={[styles.departsText, { color: COLORS.secondary }]}>
-                {countdown.past ? 'Departed ' : 'Departs in '}
-                <Text style={{ fontWeight: 'bold', color: COLORS.primary }}>{countdown.value}</Text>{' '}
-                <Text style={{ color: COLORS.secondary }}>{unitLabel.toLowerCase()}</Text>
-              </Text>
-            </View>
+            <>
+              <View style={styles.fullWidthLine} />
+              <View style={styles.statusSection}>
+                <Ionicons 
+                  name={isLiveTrain ? "train" : "time-outline"} 
+                  size={20} 
+                  color={COLORS.primary} 
+                  style={{ marginRight: 8 }} 
+                />
+                <Text style={styles.statusText}>
+                  {isLiveTrain ? 'Train is en route and ' : ''}
+                  {countdown.past ? 'Departed ' : 'Departs in '}
+                  <Text style={{ fontWeight: 'bold' }}>{countdown.value}</Text>{' '}
+                  {unitLabel.toLowerCase()}
+                </Text>
+              </View>
+            </>
           )}
+          
           <View style={styles.fullWidthLine} />
 
-          {/* LIVE TRAIN VIEW: Show next stop as primary, elapsed stops in duration row */}
-          {isLiveTrain && nextStop && !isRouteExpanded ? (
-            <>
-              {/* Next Stop (Primary) - only show if there are more stops after this one */}
-              {remainingStopsCount > 0 && (
-                <>
-                  <View style={styles.infoSection}>
-                    <View style={styles.infoHeader}>
-                      <MaterialCommunityIcons name="arrow-top-right" size={16} color={COLORS.primary} />
-                      <TouchableOpacity
-                        style={styles.stationTouchable}
-                        onPress={() => handleStationPress(nextStop.code)}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.locationCode}>{nextStop.code}</Text>
-                        <Text style={styles.locationName}> • {nextStop.name}</Text>
-                      </TouchableOpacity>
-                    </View>
-                    <TimeDisplay
-                      time={nextStop.time}
-                      dayOffset={nextStop.dayOffset}
-                      style={styles.timeText}
-                      superscriptStyle={styles.timeSuperscript}
-                    />
-                    <View style={styles.durationLineRow}>
-                      <View style={styles.durationContentRow}>
-                        <MaterialCommunityIcons
-                          name="clock-outline"
-                          size={14}
-                          color={COLORS.secondary}
-                          style={{ marginRight: 6 }}
-                        />
-                        <Text style={styles.durationText}>{remainingDuration}</Text>
-                        {remainingDistanceMiles !== null && (
-                          <Text style={[styles.durationText, { marginLeft: 0 }]}>
-                            {' '}
-                            • {remainingDistanceMiles.toFixed(0)} mi
-                          </Text>
-                        )}
-                        <Text style={[styles.durationText, { marginLeft: 0 }]}>
-                          {' '}
-                          • {remainingStopsCount} {pluralize(remainingStopsCount, 'stop')} left
-                        </Text>
-                        <TouchableOpacity
-                          style={styles.elapsedStopsButton}
-                          onPress={() => setIsRouteExpanded(true)}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={styles.elapsedStopsText}> • show route</Text>
-                        </TouchableOpacity>
-                      </View>
-                      <View style={styles.horizontalLine} />
-                    </View>
-                  </View>
+          {/* Departure Info */}
+          <View style={styles.infoSection}>
+            <View style={styles.infoHeader}>
+              <MaterialCommunityIcons name="arrow-top-right" size={16} color={COLORS.primary} />
+              <TouchableOpacity
+                style={styles.stationTouchable}
+                onPress={() => handleStationPress(trainData.fromCode)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.locationCode}>{trainData.fromCode}</Text>
+                <Text style={styles.locationName}> • {trainData.from}</Text>
+              </TouchableOpacity>
+            </View>
+            <TimeDisplay
+              time={trainData.departTime}
+              dayOffset={0}
+              style={styles.timeText}
+              superscriptStyle={styles.timeSuperscript}
+            />
+            <View style={styles.durationLineRow}>
+              <View style={styles.durationContentRow}>
+                <MaterialCommunityIcons
+                  name="clock-outline"
+                  size={14}
+                  color={COLORS.secondary}
+                  style={{ marginRight: 6 }}
+                />
+                <Text style={styles.durationText}>{duration}</Text>
+                {distanceMiles !== null && (
+                  <Text style={[styles.durationText, { marginLeft: 0 }]}>
+                    {' '}
+                    • {Math.round(convertDistance(distanceMiles, distanceUnit)).toLocaleString()} {distanceSuffix(distanceUnit)}
+                  </Text>
+                )}
+                {allStops.length > 0 && (
+                  <Text style={[styles.durationText, { marginLeft: 0 }]}>
+                    {' '}
+                    • {allStops.length - 1} {pluralize(allStops.length - 1, 'stop')}
+                  </Text>
+                )}
+              </View>
+              <View style={styles.horizontalLine} />
+            </View>
+          </View>
 
-                  {/* Future Stops */}
-                  {futureStops.length > 0 && (
-                    <View style={styles.timelineContainer}>
-                      <View style={styles.dashedLineWrapper}>
-                        <View style={styles.dashedLine} />
-                      </View>
-                      {futureStops.map((stop, index) => (
+          {/* Arrival Info */}
+          <View style={styles.infoSection}>
+            <View style={styles.infoHeader}>
+              <MaterialCommunityIcons name="arrow-bottom-left" size={16} color={COLORS.primary} />
+              <TouchableOpacity
+                style={styles.stationTouchable}
+                onPress={() => handleStationPress(trainData.toCode)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.locationCode}>{trainData.toCode}</Text>
+                <Text style={styles.locationName}> • {trainData.to}</Text>
+              </TouchableOpacity>
+            </View>
+            <TimeDisplay
+              time={trainData.arriveTime}
+              dayOffset={trainData.arriveDayOffset || 0}
+              style={styles.timeText}
+              superscriptStyle={styles.timeSuperscript}
+            />
+          </View>
+
+          <View style={styles.fullWidthLine} />
+
+          {/* Where's My Train? Section */}
+          <TouchableOpacity
+            style={styles.expandableSection}
+            onPress={() => setIsWhereIsMyTrainExpanded(!isWhereIsMyTrainExpanded)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.expandableHeader}>
+              <Ionicons name="train-outline" size={20} color={COLORS.primary} />
+              <Text style={styles.expandableTitle}>Where's My Train?</Text>
+              <Ionicons 
+                name={isWhereIsMyTrainExpanded ? "chevron-up" : "chevron-down"} 
+                size={20} 
+                color={COLORS.secondary} 
+              />
+            </View>
+          </TouchableOpacity>
+
+          {/* Expanded Route Details */}
+          {isWhereIsMyTrainExpanded && allStops.length > 0 && (
+            <View style={styles.expandedContent}>
+              {/* Full Route Status */}
+              <View style={styles.expandedInfo}>
+                <View style={styles.statusBadge}>
+                  <Ionicons name="checkmark-circle" size={16} color="#34C759" />
+                  <Text style={styles.statusBadgeText}>
+                    {isLiveTrain ? 'EN ROUTE' : 'SCHEDULED'}
+                  </Text>
+                </View>
+                {isLiveTrain && nextStopIndex > 0 && (
+                  <Text style={styles.expandedSubtext}>
+                    Train is {nextStopIndex} {pluralize(nextStopIndex, 'stop')} into journey
+                  </Text>
+                )}
+              </View>
+
+              {/* All Stops Timeline */}
+              <View style={styles.fullRouteTimeline}>
+                {allStops.map((stop, index) => {
+                  const isPast = isLiveTrain && index < nextStopIndex;
+                  const isCurrent = isLiveTrain && index === nextStopIndex;
+                  const isOrigin = index === 0;
+                  const isDest = index === allStops.length - 1;
+
+                  return (
+                    <View key={index} style={styles.timelineStop}>
+                      {!isOrigin && <View style={[styles.timelineConnector, isPast && styles.timelineConnectorPast]} />}
+                      {!isDest && <View style={[styles.timelineConnectorBottom, isPast && styles.timelineConnectorPast]} />}
+                      <View style={styles.timelineStopRow}>
+                        <View style={styles.timelineMarker}>
+                          {isCurrent ? (
+                            <Ionicons name="train" size={12} color={COLORS.primary} />
+                          ) : (
+                            <View style={[styles.timelineDot, isPast && styles.timelineDotPast]} />
+                          )}
+                        </View>
                         <TouchableOpacity
-                          key={index}
-                          style={styles.stopSection}
+                          style={styles.timelineStopInfo}
                           onPress={() => handleStationPress(stop.code)}
                           activeOpacity={0.7}
                         >
-                          <TimeDisplay
-                            time={stop.time}
-                            dayOffset={stop.dayOffset}
-                            style={styles.stopTime}
-                            superscriptStyle={styles.stopTimeSuperscript}
-                          />
-                          <Text style={styles.stopStation}>{stop.name}</Text>
-                          <Text style={styles.stopCode}>{stop.code}</Text>
+                          <Text style={[styles.timelineStopName, isPast && styles.timelineTextPast]}>
+                            {stop.name}
+                            {isCurrent && <Text style={styles.currentStopBadge}> NEXT</Text>}
+                          </Text>
+                          <View style={styles.timelineStopCodeRow}>
+                            <Text style={[styles.timelineStopCode, isPast && styles.timelineTextPast]}>
+                              {stop.code}
+                            </Text>
+                            {stopWeather[stop.code] && (
+                              <>
+                                <Text style={[styles.timelineStopCode, isPast && styles.timelineTextPast]}> • </Text>
+                                <Ionicons name={stopWeather[stop.code].icon as any} size={11} color={COLORS.secondary} style={isPast ? { opacity: 0.6 } : undefined} />
+                                <Text style={[styles.timelineStopCode, isPast && styles.timelineTextPast]}> {stopWeather[stop.code].temp}°{tempUnit}</Text>
+                              </>
+                            )}
+                          </View>
                         </TouchableOpacity>
-                      ))}
-                      <View style={styles.endLineRow}>
-                        <View style={styles.horizontalLine} />
+                        <TimeDisplay
+                          time={stop.time}
+                          dayOffset={stop.dayOffset}
+                          style={{
+                            ...styles.timelineStopTime,
+                            ...(isPast ? styles.timelineTextPast : {}),
+                          }}
+                          superscriptStyle={{
+                            ...styles.timelineStopTimeSuperscript,
+                            ...(isPast ? styles.timelineTextPast : {}),
+                          }}
+                        />
                       </View>
                     </View>
-                  )}
-                </>
-              )}
+                  );
+                })}
+              </View>
+            </View>
+          )}
 
-              {/* Final Destination */}
-              <View style={styles.infoSection}>
-                <View style={styles.infoHeader}>
-                  <MaterialCommunityIcons name="arrow-bottom-left" size={16} color={COLORS.primary} />
-                  <TouchableOpacity
-                    style={styles.stationTouchable}
-                    onPress={() => handleStationPress(allStops[allStops.length - 1]?.code || trainData.toCode)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.locationCode}>{allStops[allStops.length - 1]?.code || trainData.toCode}</Text>
-                    <Text style={styles.locationName}>
-                      {' '}
-                      • {allStops[allStops.length - 1]?.name || gtfsParser.getStopName(trainData.toCode)}
-                    </Text>
-                  </TouchableOpacity>
+          <View style={styles.fullWidthLine} />
+
+          {/* Good to Know Section */}
+          <View style={styles.goodToKnowSection}>
+            <Text style={styles.sectionTitle}>Good to Know</Text>
+            
+            {/* Timezone Widget */}
+            {timezoneInfo && (
+              <View style={styles.infoCard}>
+                <View style={styles.infoCardIcon}>
+                  <Ionicons name="time-outline" size={24} color={COLORS.primary} />
                 </View>
-                <TimeDisplay
-                  time={allStops[allStops.length - 1]?.time || trainData.arriveTime}
-                  dayOffset={allStops[allStops.length - 1]?.dayOffset || trainData.arriveDayOffset}
-                  style={styles.timeText}
-                  superscriptStyle={styles.timeSuperscript}
-                />
-                {/* Show "show full route" link when at final stop */}
-                {remainingStopsCount === 0 && (
-                  <View style={styles.durationLineRow}>
-                    <View style={styles.durationContentRow}>
-                      <TouchableOpacity
-                        style={styles.elapsedStopsButton}
-                        onPress={() => setIsRouteExpanded(true)}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.elapsedStopsText}>show route</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
+                <View style={styles.infoCardContent}>
+                  <Text style={styles.infoCardTitle}>
+                    {timezoneInfo.hasChange ? 'Timezone Change' : 'No Timezone Change'}
+                  </Text>
+                  <Text style={styles.infoCardSubtext}>{timezoneInfo.message}</Text>
+                </View>
+              </View>
+            )}
+
+            {/* Arrival Weather Widget */}
+            <View style={styles.infoCard}>
+              <View style={styles.infoCardIcon}>
+                {isLoadingWeather ? (
+                  <ActivityIndicator size="small" color={COLORS.primary} />
+                ) : weatherData ? (
+                  <Ionicons name={weatherData.icon as any} size={24} color={COLORS.primary} />
+                ) : (
+                  <Ionicons name="partly-sunny-outline" size={24} color={COLORS.primary} />
                 )}
               </View>
-            </>
-          ) : (
-            <>
-              {/* STANDARD VIEW: Show full route (non-live trains or expanded view) */}
-              {/* EXPANDED LIVE TRAIN VIEW: Show all stops with elapsed ones in secondary color */}
-              {isLiveTrain && isRouteExpanded && allStops.length > 0 ? (
-                <>
-                  {/* Origin Stop */}
-                  <View style={styles.infoSection}>
-                    <View style={styles.infoHeader}>
-                      <MaterialCommunityIcons
-                        name="arrow-top-right"
-                        size={16}
-                        color={pastStopsCount > 0 ? COLORS.secondary : COLORS.primary}
-                      />
-                      <TouchableOpacity
-                        style={styles.stationTouchable}
-                        onPress={() => handleStationPress(allStops[0].code)}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={[styles.locationCode, pastStopsCount > 0 && styles.elapsedText]}>
-                          {allStops[0].code}
-                        </Text>
-                        <Text style={[styles.locationName, pastStopsCount > 0 && styles.elapsedText]}>
-                          {' '}
-                          • {allStops[0].name}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                    <TimeDisplay
-                      time={allStops[0].time}
-                      dayOffset={allStops[0].dayOffset}
-                      style={[styles.timeText, pastStopsCount > 0 && styles.elapsedText]}
-                      superscriptStyle={[styles.timeSuperscript, pastStopsCount > 0 && styles.elapsedText]}
-                    />
-                    <View style={styles.durationLineRow}>
-                      <View style={styles.durationContentRow}>
-                        <MaterialCommunityIcons
-                          name="clock-outline"
-                          size={14}
-                          color={COLORS.secondary}
-                          style={{ marginRight: 6 }}
-                        />
-                        <Text style={styles.durationText}>{duration}</Text>
-                        {distanceMiles !== null && (
-                          <Text style={[styles.durationText, { marginLeft: 0 }]}> • {distanceMiles.toFixed(0)} mi</Text>
-                        )}
-                        <Text style={[styles.durationText, { marginLeft: 0 }]}>
-                          {' '}
-                          • {allStops.length - 1} {pluralize(allStops.length - 1, 'stop')}
-                        </Text>
-                        <TouchableOpacity
-                          style={styles.elapsedStopsButton}
-                          onPress={() => setIsRouteExpanded(false)}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={styles.elapsedStopsText}> • show remaining</Text>
-                        </TouchableOpacity>
-                      </View>
-                      <View style={styles.horizontalLine} />
-                    </View>
+              <View style={styles.infoCardContent}>
+                <Text style={styles.infoCardTitle}>Arrival Weather</Text>
+                {isLoadingWeather ? (
+                  <Text style={styles.infoCardSubtext}>Loading...</Text>
+                ) : weatherData ? (
+                  <Text style={styles.infoCardSubtext}>
+                    {weatherData.temperature}°{tempUnit} and {weatherData.condition.toLowerCase()}
+                  </Text>
+                ) : (
+                  <Text style={styles.infoCardSubtext}>Weather data unavailable</Text>
+                )}
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.fullWidthLine} />
+
+          {/* My History on This Route Section */}
+          <View style={styles.historySection}>
+            <Text style={styles.sectionTitle}>My History on This Route</Text>
+            {trainData && (
+              <Text style={styles.historyRouteSubtitle}>
+                {trainData.fromCode} → {trainData.toCode}
+              </Text>
+            )}
+            
+            <View style={styles.historyCard}>
+              <View style={styles.historyStats}>
+                <View style={styles.historyStat}>
+                  <Text style={styles.historyStatLabel}>Trips</Text>
+                  <View style={styles.historyStatValueRow}>
+                    <MaterialCommunityIcons name="train-car" size={20} color={COLORS.secondary} style={styles.historyStatIcon} />
+                    <Text style={styles.historyStatValue}>
+                      {routeHistory && routeHistory.trips > 0 ? routeHistory.trips : 0}
+                    </Text>
                   </View>
-
-                  {/* All Intermediate Stops with elapsed styling */}
-                  {allStops.length > 2 && (
-                    <View style={styles.timelineContainer}>
-                      <View style={styles.dashedLineWrapper}>
-                        <View style={styles.dashedLine} />
-                      </View>
-                      {allStops.slice(1, -1).map((stop, index) => {
-                        // Check if this stop has elapsed (index + 1 because we sliced from 1)
-                        const isElapsed = index + 1 < pastStopsCount;
-                        return (
-                          <TouchableOpacity
-                            key={index}
-                            style={styles.stopSection}
-                            onPress={() => handleStationPress(stop.code)}
-                            activeOpacity={0.7}
-                          >
-                            <TimeDisplay
-                              time={stop.time}
-                              dayOffset={stop.dayOffset}
-                              style={[styles.stopTime, isElapsed && styles.elapsedText]}
-                              superscriptStyle={[styles.stopTimeSuperscript, isElapsed && styles.elapsedText]}
-                            />
-                            <Text style={[styles.stopStation, isElapsed && styles.elapsedText]}>{stop.name}</Text>
-                            <Text style={[styles.stopCode, isElapsed && styles.elapsedText]}>{stop.code}</Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                      <View style={styles.endLineRow}>
-                        <View style={styles.horizontalLine} />
-                      </View>
-                    </View>
-                  )}
-
-                  {/* Final Destination */}
-                  <View style={styles.infoSection}>
-                    <View style={styles.infoHeader}>
-                      <MaterialCommunityIcons name="arrow-bottom-left" size={16} color={COLORS.primary} />
-                      <TouchableOpacity
-                        style={styles.stationTouchable}
-                        onPress={() => handleStationPress(allStops[allStops.length - 1].code)}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.locationCode}>{allStops[allStops.length - 1].code}</Text>
-                        <Text style={styles.locationName}> • {allStops[allStops.length - 1].name}</Text>
-                      </TouchableOpacity>
-                    </View>
-                    <TimeDisplay
-                      time={allStops[allStops.length - 1].time}
-                      dayOffset={allStops[allStops.length - 1].dayOffset}
-                      style={styles.timeText}
-                      superscriptStyle={styles.timeSuperscript}
-                    />
+                </View>
+                <View style={styles.historyStat}>
+                  <Text style={styles.historyStatLabel}>Distance</Text>
+                  <View style={styles.historyStatValueRow}>
+                    <Ionicons name="navigate" size={20} color={COLORS.secondary} style={styles.historyStatIcon} />
+                    <Text style={styles.historyStatValue}>
+                      {routeHistory && routeHistory.trips > 0
+                        ? `${Math.round(convertDistance(routeHistory.distance, distanceUnit)).toLocaleString()} ${distanceSuffix(distanceUnit)}`
+                        : `0 ${distanceSuffix(distanceUnit)}`}
+                    </Text>
                   </View>
-                </>
-              ) : (
-                <>
-                  {/* NON-LIVE TRAINS: Show segment or full route based on isRouteExpanded */}
-                  {isSegment && isRouteExpanded && allStops.length > 0 ? (
-                    <>
-                      {/* FULL ROUTE VIEW for segments */}
-                      {/* Origin Stop */}
-                      {(() => {
-                        // Check if origin is outside user's segment (before user's starting station)
-                        const fromIdx = allStops.findIndex(s => s.code === trainData.fromCode);
-                        const isOriginOutsideSegment = fromIdx > 0;
-                        return (
-                          <View style={styles.infoSection}>
-                            <View style={styles.infoHeader}>
-                              <MaterialCommunityIcons
-                                name="arrow-top-right"
-                                size={16}
-                                color={isOriginOutsideSegment ? COLORS.secondary : COLORS.primary}
-                              />
-                              <TouchableOpacity
-                                style={styles.stationTouchable}
-                                onPress={() => handleStationPress(allStops[0].code)}
-                                activeOpacity={0.7}
-                              >
-                                <Text style={[styles.locationCode, isOriginOutsideSegment && styles.elapsedText]}>
-                                  {allStops[0].code}
-                                </Text>
-                                <Text style={[styles.locationName, isOriginOutsideSegment && styles.elapsedText]}>
-                                  {' '}
-                                  • {allStops[0].name}
-                                </Text>
-                              </TouchableOpacity>
-                            </View>
-                            <TimeDisplay
-                              time={allStops[0].time}
-                              dayOffset={allStops[0].dayOffset}
-                              style={[styles.timeText, isOriginOutsideSegment && styles.elapsedText]}
-                              superscriptStyle={[styles.timeSuperscript, isOriginOutsideSegment && styles.elapsedText]}
-                            />
-                            <View style={styles.durationLineRow}>
-                              <View style={styles.durationContentRow}>
-                                <MaterialCommunityIcons
-                                  name="clock-outline"
-                                  size={14}
-                                  color={COLORS.secondary}
-                                  style={{ marginRight: 6 }}
-                                />
-                                <Text style={styles.durationText}>{fullRouteDuration}</Text>
-                                {fullRouteDistanceMiles !== null && (
-                                  <Text style={[styles.durationText, { marginLeft: 0 }]}>
-                                    {' '}
-                                    • {fullRouteDistanceMiles.toFixed(0)} mi
-                                  </Text>
-                                )}
-                                <Text style={[styles.durationText, { marginLeft: 0 }]}>
-                                  {' '}
-                                  • {allStops.length - 1} {pluralize(allStops.length - 1, 'stop')}
-                                </Text>
-                                <TouchableOpacity
-                                  style={styles.elapsedStopsButton}
-                                  onPress={() => setIsRouteExpanded(false)}
-                                  activeOpacity={0.7}
-                                >
-                                  <Text style={styles.elapsedStopsText}> • show remaining</Text>
-                                </TouchableOpacity>
-                              </View>
-                              <View style={styles.horizontalLine} />
-                            </View>
-                          </View>
-                        );
-                      })()}
-
-                      {/* All Intermediate Stops - highlight user's segment */}
-                      {allStops.length > 2 && (
-                        <View style={styles.timelineContainer}>
-                          <View style={styles.dashedLineWrapper}>
-                            <View style={styles.dashedLine} />
-                          </View>
-                          {allStops.slice(1, -1).map((stop, index) => {
-                            // Check if this stop is within user's segment
-                            const fromIdx = allStops.findIndex(s => s.code === trainData.fromCode);
-                            const toIdx = allStops.findIndex(s => s.code === trainData.toCode);
-                            const currentIdx = index + 1; // +1 because we sliced from 1
-                            const isOutsideSegment = currentIdx < fromIdx || currentIdx > toIdx;
-                            return (
-                              <TouchableOpacity
-                                key={index}
-                                style={styles.stopSection}
-                                onPress={() => handleStationPress(stop.code)}
-                                activeOpacity={0.7}
-                              >
-                                <TimeDisplay
-                                  time={stop.time}
-                                  dayOffset={stop.dayOffset}
-                                  style={[styles.stopTime, isOutsideSegment && styles.elapsedText]}
-                                  superscriptStyle={[
-                                    styles.stopTimeSuperscript,
-                                    isOutsideSegment && styles.elapsedText,
-                                  ]}
-                                />
-                                <Text style={[styles.stopStation, isOutsideSegment && styles.elapsedText]}>
-                                  {stop.name}
-                                </Text>
-                                <Text style={[styles.stopCode, isOutsideSegment && styles.elapsedText]}>
-                                  {stop.code}
-                                </Text>
-                              </TouchableOpacity>
-                            );
-                          })}
-                          <View style={styles.endLineRow}>
-                            <View style={styles.horizontalLine} />
-                          </View>
-                        </View>
-                      )}
-
-                      {/* Final Destination */}
-                      {(() => {
-                        // Check if final destination is outside user's segment
-                        const toIdx = allStops.findIndex(s => s.code === trainData.toCode);
-                        const isDestinationOutsideSegment = toIdx !== -1 && toIdx < allStops.length - 1;
-                        return (
-                          <View style={styles.infoSection}>
-                            <View style={styles.infoHeader}>
-                              <MaterialCommunityIcons
-                                name="arrow-bottom-left"
-                                size={16}
-                                color={isDestinationOutsideSegment ? COLORS.secondary : COLORS.primary}
-                              />
-                              <TouchableOpacity
-                                style={styles.stationTouchable}
-                                onPress={() => handleStationPress(allStops[allStops.length - 1].code)}
-                                activeOpacity={0.7}
-                              >
-                                <Text style={[styles.locationCode, isDestinationOutsideSegment && styles.elapsedText]}>
-                                  {allStops[allStops.length - 1].code}
-                                </Text>
-                                <Text style={[styles.locationName, isDestinationOutsideSegment && styles.elapsedText]}>
-                                  {' '}
-                                  • {allStops[allStops.length - 1].name}
-                                </Text>
-                              </TouchableOpacity>
-                            </View>
-                            <TimeDisplay
-                              time={allStops[allStops.length - 1].time}
-                              dayOffset={allStops[allStops.length - 1].dayOffset}
-                              style={[styles.timeText, isDestinationOutsideSegment && styles.elapsedText]}
-                              superscriptStyle={[
-                                styles.timeSuperscript,
-                                isDestinationOutsideSegment && styles.elapsedText,
-                              ]}
-                            />
-                          </View>
-                        );
-                      })()}
-                    </>
-                  ) : (
-                    <>
-                      {/* SEGMENT VIEW (or full route if not a segment) */}
-                      {/* Departure Info */}
-                      <View style={styles.infoSection}>
-                        <View style={styles.infoHeader}>
-                          <MaterialCommunityIcons name="arrow-top-right" size={16} color={COLORS.primary} />
-                          <TouchableOpacity
-                            style={styles.stationTouchable}
-                            onPress={() => handleStationPress(trainData.fromCode)}
-                            activeOpacity={0.7}
-                          >
-                            <Text style={styles.locationCode}>{trainData.fromCode}</Text>
-                            <Text style={styles.locationName}> • {gtfsParser.getStopName(trainData.fromCode)}</Text>
-                          </TouchableOpacity>
-                        </View>
-                        {(() => {
-                          const delay = trainData.realtime?.delay;
-                          // Localize day offset: departure is always day 0 for segment view
-                          // Use GTFS-derived offset which is more reliable than trainData.departDayOffset
-                          const localizedDepartOffset = segmentDepartDayOffset - segmentBaseDayOffset; // Should always be 0
-                          if (delay && delay > 0) {
-                            const delayed = addDelayToTime(trainData.departTime, delay, localizedDepartOffset);
-                            return (
-                              <TimeDisplay
-                                time={trainData.departTime}
-                                dayOffset={localizedDepartOffset}
-                                style={styles.timeText}
-                                superscriptStyle={styles.timeSuperscript}
-                                delayMinutes={delay}
-                                delayedTime={delayed.time}
-                                delayedDayOffset={delayed.dayOffset}
-                              />
-                            );
-                          }
-                          return (
-                            <TimeDisplay
-                              time={trainData.departTime}
-                              dayOffset={localizedDepartOffset}
-                              style={styles.timeText}
-                              superscriptStyle={styles.timeSuperscript}
-                            />
-                          );
-                        })()}
-                        <View style={styles.durationLineRow}>
-                          <View style={styles.durationContentRow}>
-                            <MaterialCommunityIcons
-                              name="clock-outline"
-                              size={14}
-                              color={COLORS.secondary}
-                              style={{ marginRight: 6 }}
-                            />
-                            <Text style={styles.durationText}>{duration}</Text>
-                            {distanceMiles !== null && (
-                              <Text style={[styles.durationText, { marginLeft: 0 }]}>
-                                {' '}
-                                • {distanceMiles.toFixed(0)} mi
-                              </Text>
-                            )}
-                            {intermediateStops && (
-                              <Text style={[styles.durationText, { marginLeft: 0 }]}>
-                                {' '}
-                                • {intermediateStops.length} {pluralize(intermediateStops.length, 'stop')}
-                              </Text>
-                            )}
-                            {isSegment && (
-                              <TouchableOpacity
-                                style={styles.elapsedStopsButton}
-                                onPress={() => setIsRouteExpanded(true)}
-                                activeOpacity={0.7}
-                              >
-                                <Text style={styles.elapsedStopsText}> • show route</Text>
-                              </TouchableOpacity>
-                            )}
-                          </View>
-                          <View style={styles.horizontalLine} />
-                        </View>
-                      </View>
-
-                      {/* Intermediate Stops with Timeline */}
-                      {intermediateStops && intermediateStops.length > 0 && (
-                        <View style={styles.timelineContainer}>
-                          <View style={styles.dashedLineWrapper}>
-                            <View style={styles.dashedLine} />
-                          </View>
-                          {intermediateStops.map((stop, index) => (
-                            <TouchableOpacity
-                              key={index}
-                              style={styles.stopSection}
-                              onPress={() => handleStationPress(stop.code)}
-                              activeOpacity={0.7}
-                            >
-                              <TimeDisplay
-                                time={stop.time}
-                                dayOffset={stop.dayOffset}
-                                style={styles.stopTime}
-                                superscriptStyle={styles.stopTimeSuperscript}
-                              />
-                              <Text style={styles.stopStation}>{stop.name}</Text>
-                              <Text style={styles.stopCode}>{stop.code}</Text>
-                            </TouchableOpacity>
-                          ))}
-                          <View style={styles.endLineRow}>
-                            <View style={styles.horizontalLine} />
-                          </View>
-                        </View>
-                      )}
-
-                      {/* Arrival Info */}
-                      <View style={styles.infoSection}>
-                        <View style={styles.infoHeader}>
-                          <MaterialCommunityIcons name="arrow-bottom-left" size={16} color={COLORS.primary} />
-                          <TouchableOpacity
-                            style={styles.stationTouchable}
-                            onPress={() => handleStationPress(trainData.toCode)}
-                            activeOpacity={0.7}
-                          >
-                            <Text style={styles.locationCode}>{trainData.toCode}</Text>
-                            <Text style={styles.locationName}> • {gtfsParser.getStopName(trainData.toCode)}</Text>
-                          </TouchableOpacity>
-                        </View>
-                        {(() => {
-                          const delay = trainData.realtime?.delay;
-                          // Localize day offset relative to segment departure
-                          // Use GTFS-derived offset which is more reliable than trainData.arriveDayOffset
-                          const localizedArriveOffset = segmentArriveDayOffset - segmentBaseDayOffset;
-                          if (delay && delay > 0) {
-                            const delayed = addDelayToTime(trainData.arriveTime, delay, localizedArriveOffset);
-                            return (
-                              <TimeDisplay
-                                time={trainData.arriveTime}
-                                dayOffset={localizedArriveOffset}
-                                style={styles.timeText}
-                                superscriptStyle={styles.timeSuperscript}
-                                delayMinutes={delay}
-                                delayedTime={delayed.time}
-                                delayedDayOffset={delayed.dayOffset}
-                              />
-                            );
-                          }
-                          return (
-                            <TimeDisplay
-                              time={trainData.arriveTime}
-                              dayOffset={localizedArriveOffset}
-                              style={styles.timeText}
-                              superscriptStyle={styles.timeSuperscript}
-                            />
-                          );
-                        })()}
-                      </View>
-                    </>
-                  )}
-                </>
+                </View>
+                <View style={styles.historyStat}>
+                  <Text style={styles.historyStatLabel}>Travel Time</Text>
+                  <View style={styles.historyStatValueRow}>
+                    <Ionicons name="time" size={20} color={COLORS.secondary} style={styles.historyStatIcon} />
+                    <Text style={styles.historyStatValue}>
+                      {routeHistory && routeHistory.trips > 0 
+                        ? `${Math.floor(routeHistory.duration / 60)}h ${routeHistory.duration % 60}m`
+                        : '0m'
+                      }
+                    </Text>
+                  </View>
+                </View>
+              </View>
+              {(!routeHistory || routeHistory.trips === 0) && (
+                <Text style={styles.historyEmptyText}>No past rides on this route</Text>
               )}
-            </>
-          )}
+            </View>
+          </View>
         </ScrollView>
       </Animated.View>
     </View>
@@ -1007,19 +737,6 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
 }
 
 const styles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'transparent',
-  },
-  blurOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  blurContainer: {
-    overflow: 'hidden',
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-  },
   modalContent: {
     flex: 1,
     marginHorizontal: -Spacing.xl,
@@ -1065,14 +782,6 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.family,
     color: COLORS.secondary,
   },
-  closeButton: {
-    padding: 4,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   absoluteCloseButton: {
     position: 'absolute',
     top: 0,
@@ -1098,11 +807,13 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.family,
     color: COLORS.primary,
   },
-  departsSection: {
-    paddingBottom: 12,
+  statusSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 20,
+    paddingVertical: 12,
   },
-  departsText: {
+  statusText: {
     fontSize: 16,
     fontFamily: FONTS.family,
     color: COLORS.primary,
@@ -1112,16 +823,318 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.tertiary,
     backgroundColor: 'transparent',
+  },
+  journeySection: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+  stationRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  stationLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  iconCircle: {
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  stationInfo: {
+    flex: 1,
+  },
+  stationCode: {
+    fontSize: 16,
+    fontWeight: '600',
+    fontFamily: FONTS.family,
+    color: COLORS.primary,
+  },
+  bigTimeText: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    fontFamily: FONTS.family,
+    color: COLORS.primary,
+  },
+  bigTimeSuperscript: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.secondary,
+    marginLeft: 2,
+  },
+  journeyInfoBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    marginLeft: 12,
+  },
+  verticalLine: {
+    width: 2,
+    height: '100%',
+    backgroundColor: COLORS.tertiary,
+    marginRight: 20,
+  },
+  journeyDetails: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  journeyDetailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  journeyDetailText: {
+    fontSize: 14,
+    fontFamily: FONTS.family,
+    color: COLORS.secondary,
+  },
+  expandableSection: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: COLORS.background.secondary,
+  },
+  expandableHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  expandableTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    fontFamily: FONTS.family,
+    color: COLORS.primary,
+    flex: 1,
+  },
+  expandedContent: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: COLORS.background.secondary,
+  },
+  expandedInfo: {
     marginBottom: 16,
   },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: COLORS.background.primary,
+    borderRadius: 16,
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+  },
+  statusBadgeText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#34C759',
+  },
+  expandedSubtext: {
+    fontSize: 14,
+    fontFamily: FONTS.family,
+    color: COLORS.secondary,
+  },
+  fullRouteTimeline: {
+    marginTop: 8,
+  },
+  timelineStop: {
+    position: 'relative',
+  },
+  timelineConnector: {
+    position: 'absolute',
+    left: 11,
+    top: 0,
+    width: 2,
+    height: 24,
+    backgroundColor: COLORS.tertiary,
+  },
+  timelineConnectorBottom: {
+    position: 'absolute',
+    left: 11,
+    top: 24,
+    bottom: 0,
+    width: 2,
+    backgroundColor: COLORS.tertiary,
+  },
+  timelineConnectorPast: {
+    backgroundColor: COLORS.secondary,
+  },
+  timelineStopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 12,
+  },
+  timelineMarker: {
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  timelineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.tertiary,
+  },
+  timelineDotPast: {
+    backgroundColor: COLORS.secondary,
+  },
+  timelineStopInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  timelineStopName: {
+    fontSize: 15,
+    fontWeight: '500',
+    fontFamily: FONTS.family,
+    color: COLORS.primary,
+  },
+  currentStopBadge: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: COLORS.tertiary,
+  },
+  timelineStopCode: {
+    fontSize: 12,
+    fontFamily: FONTS.family,
+    color: COLORS.secondary,
+  },
+  timelineStopCodeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  timelineStopTime: {
+    fontSize: 16,
+    fontWeight: '600',
+    fontFamily: FONTS.family,
+    color: COLORS.primary,
+  },
+  timelineStopTimeSuperscript: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: COLORS.secondary,
+    marginLeft: 2,
+  },
+  timelineTextPast: {
+    color: COLORS.secondary,
+    opacity: 0.6,
+  },
+  goodToKnowSection: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    fontFamily: FONTS.family,
+    color: COLORS.primary,
+    marginBottom: 16,
+  },
+  infoCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: COLORS.background.secondary,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border.primary,
+  },
+  infoCardIcon: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.tertiary,
+    borderRadius: 20,
+    marginRight: 12,
+  },
+  infoCardContent: {
+    flex: 1,
+  },
+  infoCardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    fontFamily: FONTS.family,
+    color: COLORS.primary,
+    marginBottom: 4,
+  },
+  infoCardSubtext: {
+    fontSize: 14,
+    fontFamily: FONTS.family,
+    color: COLORS.secondary,
+  },
+  historySection: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+  historyRouteSubtitle: {
+    fontSize: 16,
+    fontFamily: FONTS.family,
+    color: COLORS.secondary,
+    marginTop: -8,
+    marginBottom: 16,
+    fontWeight: '400',
+  },
+  historyCard: {
+    backgroundColor: COLORS.background.secondary,
+    borderRadius: 16,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: COLORS.border.primary,
+  },
+  historyStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  historyStat: {
+    alignItems: 'flex-start',
+    flex: 1,
+  },
+  historyStatLabel: {
+    fontSize: 14,
+    fontFamily: FONTS.family,
+    color: COLORS.secondary,
+    marginBottom: 8,
+    fontWeight: '400',
+  },
+  historyStatValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  historyStatIcon: {
+    marginRight: 6,
+  },
+  historyStatValue: {
+    fontSize: 24,
+    fontWeight: '400',
+    fontFamily: FONTS.family,
+    color: COLORS.primary,
+  },
+  historyEmptyText: {
+    fontSize: 14,
+    fontFamily: FONTS.family,
+    color: COLORS.secondary,
+    textAlign: 'left',
+    paddingTop: 8,
+    fontWeight: '400',
+  },
   infoSection: {
-    padding: 20,
+    paddingHorizontal: 20,
     paddingVertical: 16,
   },
   infoHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 4,
   },
   stationTouchable: {
     flexDirection: 'row',
@@ -1144,7 +1157,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontFamily: FONTS.family,
     color: COLORS.primary,
-    marginBottom: 16,
+    marginBottom: 6,
   },
   timeSuperscript: {
     fontSize: 14,
@@ -1153,177 +1166,25 @@ const styles = StyleSheet.create({
     marginLeft: 4,
     marginTop: 0,
   },
-  statusText: {
-    fontSize: 14,
-    fontFamily: FONTS.family,
-    color: COLORS.secondary,
-    marginTop: 8,
-    marginBottom: 8,
-  },
   durationLineRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 0,
     gap: 8,
   },
   durationContentRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  endLineRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingRight: 20,
-    marginTop: 24,
-    marginBottom: 8,
+  durationText: {
+    fontSize: 14,
+    fontFamily: FONTS.family,
+    color: COLORS.secondary,
   },
   horizontalLine: {
     flex: 1,
     height: 1,
     backgroundColor: COLORS.tertiary,
     marginLeft: 12,
-  },
-  statusDurationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 8,
-  },
-  durationContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  durationText: {
-    fontSize: 14,
-    fontFamily: FONTS.family,
-    color: COLORS.secondary,
-  },
-  terminalText: {
-    fontSize: 14,
-    fontFamily: FONTS.family,
-    color: COLORS.secondary,
-  },
-  timelineContainer: {
-    position: 'relative',
-    marginLeft: 8,
-  },
-  dashedLineWrapper: {
-    position: 'absolute',
-    left: 18,
-    top: 0,
-    bottom: 0,
-    width: 2,
-    height: '100%',
-  },
-  dashedLine: {
-    flex: 1,
-    width: 2,
-    borderLeftWidth: 2,
-    borderLeftColor: COLORS.tertiary,
-    borderStyle: 'dashed',
-  },
-  stopSection: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    paddingLeft: 40,
-    marginTop: -8,
-  },
-  stopTime: {
-    fontSize: 20,
-    fontWeight: '600',
-    fontFamily: FONTS.family,
-    color: COLORS.primary,
-    marginBottom: 4,
-  },
-  stopTimeSuperscript: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: COLORS.secondary,
-    marginLeft: 2,
-    marginTop: -2,
-  },
-  stopStation: {
-    fontSize: 14,
-    fontFamily: FONTS.family,
-    color: COLORS.primary,
-  },
-  stopCode: {
-    fontSize: 12,
-    fontFamily: FONTS.family,
-    color: COLORS.secondary,
-    marginBottom: 6,
-  },
-  stopElapsed: {
-    fontSize: 12,
-    fontFamily: FONTS.family,
-    color: COLORS.secondary,
-  },
-  stopMetrics: {
-    fontSize: 12,
-    fontFamily: FONTS.family,
-    color: COLORS.secondary,
-  },
-  stopInfo: {
-    fontSize: 14,
-    fontFamily: FONTS.family,
-    color: COLORS.secondary,
-    marginTop: 4,
-  },
-  actions: {
-    flexDirection: 'row',
-    padding: 20,
-    paddingTop: 16,
-    gap: 12,
-  },
-  actionButton: {
-    flex: 1,
-    backgroundColor: COLORS.tertiary,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-  },
-  actionText: {
-    fontSize: 13,
-    fontWeight: '600',
-    fontFamily: FONTS.family,
-    color: COLORS.primary,
-    marginTop: 8,
-  },
-  actionSubtext: {
-    fontSize: 11,
-    fontFamily: FONTS.family,
-    color: COLORS.secondary,
-    marginTop: 2,
-  },
-  shareButton: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  shareText: {
-    fontSize: 15,
-    fontWeight: '600',
-    fontFamily: FONTS.family,
-    color: '#000000',
-    marginTop: 8,
-  },
-  // Elapsed stops button (inline in duration row for live trains)
-  elapsedStopsButton: {
-    marginLeft: 0,
-    paddingVertical: 4,
-  },
-  elapsedStopsText: {
-    fontSize: 14,
-    fontFamily: FONTS.family,
-    color: COLORS.primary,
-    marginLeft: 0,
-  },
-  // Elapsed stop text styling (secondary color for past stops)
-  elapsedText: {
-    color: COLORS.secondary,
   },
 });

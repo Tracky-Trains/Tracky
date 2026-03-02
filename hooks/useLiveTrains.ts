@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { RealtimeService } from '../services/realtime';
-import { getRouteNameForTrainNumber } from '../services/api';
+import { getTrainDisplayName } from '../services/api';
 import { logger } from '../utils/logger';
 
 export interface LiveTrain {
@@ -36,18 +36,21 @@ export function useLiveTrains(intervalMs: number = 15000, enabled: boolean = tru
     try {
       const activeTrains = await RealtimeService.getAllActiveTrains();
 
-      const trains: LiveTrain[] = activeTrains.map(({ trainNumber, position }) => ({
-        trainNumber,
-        tripId: position.trip_id,
-        position: {
-          lat: position.latitude,
-          lon: position.longitude,
-          bearing: position.bearing,
-          speed: position.speed,
-        },
-        routeName: getRouteNameForTrainNumber(trainNumber),
-        timestamp: position.timestamp,
-      }));
+      const trains: LiveTrain[] = activeTrains.map(({ trainNumber, position }) => {
+        const { routeName } = getTrainDisplayName(position.trip_id);
+        return {
+          trainNumber,
+          tripId: position.trip_id,
+          position: {
+            lat: position.latitude,
+            lon: position.longitude,
+            bearing: position.bearing,
+            speed: position.speed,
+          },
+          routeName,
+          timestamp: position.timestamp,
+        };
+      });
 
       setLiveTrains(trains);
       setLastUpdated(Date.now());

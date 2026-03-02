@@ -47,7 +47,7 @@ export const GTFSRefreshProvider: React.FC<{ children: React.ReactNode; onRefres
       }
       const result = await ensureFreshGTFS(update => {
         setRefreshProgress(update.progress);
-        setRefreshStep(update.step + (update.detail ? ` · ${update.detail}` : ''));
+        setRefreshStep(update.step + (update.detail ? ` • ${update.detail}` : ''));
       });
       if (result.usedCache && !force) {
         // Cache is fresh — force refresh anyway without asking

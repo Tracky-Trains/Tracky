@@ -12,6 +12,7 @@ import {
 import { ScrollView } from 'react-native-gesture-handler';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { AppColors, BorderRadius, Spacing } from '../../constants/theme';
+import { type DistanceUnit, type TempUnit, useUnits } from '../../context/UnitsContext';
 import { light as hapticLight, selection as hapticSelection } from '../../utils/haptics';
 import { SlideUpModalContext } from './slide-up-modal';
 import {
@@ -38,8 +39,21 @@ const SCAN_OPTIONS = [
   { label: 'All', value: -1 },
 ] as const;
 
+const TEMP_OPTIONS: { label: string; value: TempUnit }[] = [
+  { label: '°F', value: 'F' },
+  { label: '°C', value: 'C' },
+];
+
+const DISTANCE_OPTIONS: { label: string; value: DistanceUnit; desc: string }[] = [
+  { label: 'Miles', value: 'mi', desc: 'mi' },
+  { label: 'Kilometers', value: 'km', desc: 'km' },
+  { label: 'Burgers', value: 'burgers', desc: '🍔' },
+];
+
 export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalProps) {
   const { isFullscreen, scrollOffset, panRef } = useContext(SlideUpModalContext);
+  const { tempUnit, distanceUnit, setTempUnit, setDistanceUnit } = useUnits();
+  const [unitsExpanded, setUnitsExpanded] = useState(false);
   const [syncState, setSyncState] = useState<SyncState>('idle');
   const [calendars, setCalendars] = useState<DeviceCalendar[]>([]);
   const [selectedCalendarIds, setSelectedCalendarIds] = useState<Set<string>>(new Set());
@@ -267,6 +281,67 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
           )}
         </View>
 
+        {/* UNITS Section */}
+        <Text style={styles.sectionHeader}>UNITS</Text>
+        <View style={styles.settingsList}>
+          <TouchableOpacity
+            style={styles.settingsItem}
+            activeOpacity={0.7}
+            onPress={() => { hapticLight(); setUnitsExpanded(!unitsExpanded); }}
+          >
+            <View style={styles.itemIconContainer}>
+              <Ionicons name="speedometer-outline" size={22} color={AppColors.primary} />
+            </View>
+            <View style={styles.itemContent}>
+              <Text style={styles.itemTitle}>Units</Text>
+              <Text style={styles.itemSubtitle}>
+                {TEMP_OPTIONS.find(o => o.value === tempUnit)?.label} • {DISTANCE_OPTIONS.find(o => o.value === distanceUnit)?.desc}
+              </Text>
+            </View>
+            <Ionicons
+              name={unitsExpanded ? 'chevron-down' : 'chevron-forward'}
+              size={20}
+              color={AppColors.secondary}
+            />
+          </TouchableOpacity>
+
+          {unitsExpanded && (
+            <View style={styles.expandedPanel}>
+              <Text style={styles.panelLabel}>TEMPERATURE</Text>
+              <View style={styles.pillRow}>
+                {TEMP_OPTIONS.map(opt => (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={[styles.pillOption, tempUnit === opt.value && styles.pillOptionActive]}
+                    onPress={() => { hapticSelection(); setTempUnit(opt.value); }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.pillOptionText, tempUnit === opt.value && styles.pillOptionTextActive]}>
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={[styles.panelLabel, { marginTop: Spacing.lg }]}>DISTANCE</Text>
+              <View style={styles.pillRow}>
+                {DISTANCE_OPTIONS.map(opt => (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={[styles.pillOption, distanceUnit === opt.value && styles.pillOptionActive]}
+                    onPress={() => { hapticSelection(); setDistanceUnit(opt.value); }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.pillOptionText, distanceUnit === opt.value && styles.pillOptionTextActive]}>
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
+        </View>
+
         {/* DATA Section */}
         <Text style={styles.sectionHeader}>DATA</Text>
         <View style={styles.settingsList}>
@@ -349,6 +424,11 @@ const styles = StyleSheet.create({
   itemTitle: {
     fontSize: 17,
     color: AppColors.primary,
+  },
+  itemSubtitle: {
+    fontSize: 13,
+    color: AppColors.secondary,
+    marginTop: 2,
   },
   // Expanded panel
   expandedPanel: {
@@ -453,5 +533,30 @@ const styles = StyleSheet.create({
     color: AppColors.primary,
     marginLeft: Spacing.md,
     flex: 1,
+  },
+  pillRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+  },
+  pillOption: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    backgroundColor: AppColors.background.primary,
+    borderWidth: 1,
+    borderColor: AppColors.border.primary,
+  },
+  pillOptionActive: {
+    backgroundColor: AppColors.primary,
+    borderColor: AppColors.primary,
+  },
+  pillOptionText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: AppColors.primary,
+  },
+  pillOptionTextActive: {
+    color: AppColors.background.primary,
   },
 });

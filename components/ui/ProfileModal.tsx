@@ -14,9 +14,11 @@ import Animated, {
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppColors, BorderRadius, FontSizes, Spacing } from '../../constants/theme';
+import { useUnits } from '../../context/UnitsContext';
 import { TrainStorageService } from '../../services/storage';
 import type { CompletedTrip } from '../../types/train';
-import { calculateProfileStats, formatDistance, formatDuration } from '../../utils/profile-stats';
+import { calculateProfileStats, formatDuration } from '../../utils/profile-stats';
+import { formatDistance } from '../../utils/units';
 import { SlideUpModalContext } from './slide-up-modal';
 
 interface ProfileModalProps {
@@ -201,6 +203,7 @@ export default function ProfileModal({ onClose, onOpenSettings }: ProfileModalPr
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const { isFullscreen, scrollOffset, panRef } = React.useContext(SlideUpModalContext);
+  const { distanceUnit } = useUnits();
 
   const currentYear = new Date().getFullYear();
 
@@ -326,17 +329,17 @@ export default function ProfileModal({ onClose, onOpenSettings }: ProfileModalPr
     const yearText = selectedYear || 'All-Time';
     const message = `🚂 My Train Passport ${yearText}\n\n` +
       `✈️ Trips: ${stats.totalTrips}\n` +
-      `📍 Distance: ${formatDistance(stats.totalDistance)}\n` +
+      `📍 Distance: ${formatDistance(stats.totalDistance, distanceUnit)}\n` +
       `⏱️ Travel Time: ${formatDuration(stats.totalDuration)}\n` +
       `🚉 Stations: ${stats.uniqueStations}\n` +
       `🛤️ Routes: ${stats.uniqueRoutes}`;
-    
+
     try {
       await Share.share({ message });
     } catch (error) {
       console.error('Error sharing:', error);
     }
-  }, [selectedYear, stats]);
+  }, [selectedYear, stats, distanceUnit]);
 
   const handleShareDelays = useCallback(async () => {
     hapticLight();
@@ -494,7 +497,7 @@ export default function ProfileModal({ onClose, onOpenSettings }: ProfileModalPr
             </View>
             <View style={styles.passportStatBlock}>
               <Text style={styles.passportStatLabel}>DISTANCE</Text>
-              <Text style={styles.passportStatValue} numberOfLines={1}>{formatDistance(stats.totalDistance)}</Text>
+              <Text style={styles.passportStatValue} numberOfLines={1}>{formatDistance(stats.totalDistance, distanceUnit)}</Text>
               <Text style={styles.passportStatSubtext}>
                 {stats.totalDistance > 0 ? `${(stats.totalDistance / 24901).toFixed(1)}x around the world` : '—'}
               </Text>
