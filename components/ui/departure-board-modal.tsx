@@ -1,17 +1,16 @@
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import * as Haptics from 'expo-haptics';
 import { light as hapticLight, selection as hapticSelection } from '../../utils/haptics';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Dimensions,
-    Platform,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
     View,
 } from 'react-native';
+import { Calendar, DateData } from 'react-native-calendars';
 import { Gesture, GestureDetector, ScrollView } from 'react-native-gesture-handler';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -29,6 +28,27 @@ import { SlideUpModalContext } from './slide-up-modal';
 import TimeDisplay from './TimeDisplay';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+function toDateString(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+const calendarTheme = {
+  calendarBackground: AppColors.background.tertiary,
+  dayTextColor: AppColors.primary,
+  monthTextColor: AppColors.primary,
+  arrowColor: AppColors.primary,
+  selectedDayBackgroundColor: '#FFFFFF',
+  selectedDayTextColor: '#000000',
+  textDisabledColor: 'rgba(255, 255, 255, 0.2)',
+  todayTextColor: AppColors.primary,
+  todayBackgroundColor: AppColors.background.primary,
+  textSectionTitleColor: AppColors.secondary,
+  textDayFontWeight: 'bold' as const,
+  textMonthFontWeight: 'bold' as const,
+  textDayHeaderFontWeight: 'bold' as const,
+  textMonthFontSize: 18,
+};
 
 interface DepartureBoardModalProps {
   station: Stop;
@@ -496,6 +516,14 @@ export default function DepartureBoardModal({
     });
   }, [departures, selectedDate, searchQuery, filterMode, station.stop_id]);
 
+  const calendarMinDate = useMemo(() => toDateString(new Date()), []);
+
+  const calendarMarkedDates = useMemo(() => {
+    const marks: Record<string, { selected?: boolean; selectedColor?: string }> = {};
+    marks[toDateString(selectedDate)] = { selected: true, selectedColor: '#FFFFFF' };
+    return marks;
+  }, [selectedDate]);
+
   // Date navigation
   const navigateDate = useCallback((direction: 'prev' | 'next') => {
     setSelectedDate(prev => {
@@ -513,26 +541,11 @@ export default function DepartureBoardModal({
     return selected.getTime() > today.getTime();
   }, [selectedDate]);
 
-  // Handle date picker change
-  const handleDateChange = useCallback((event: DateTimePickerEvent, date?: Date) => {
-    // On Android, the picker closes automatically; on iOS, we need to handle it
-    if (Platform.OS === 'android') {
-      setShowDatePicker(false);
-    }
-    if (event.type === 'set' && date) {
-      // Ensure date is not in the past
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const newDate = new Date(date);
-      newDate.setHours(0, 0, 0, 0);
-      if (newDate.getTime() >= today.getTime()) {
-        setSelectedDate(date);
-      }
-    }
-  }, []);
-
-  // Close date picker on iOS
-  const handleDatePickerDone = useCallback(() => {
+  // Handle calendar day press
+  const handleDayPress = useCallback((day: DateData) => {
+    hapticLight();
+    const [y, m, d] = day.dateString.split('-').map(Number);
+    setSelectedDate(new Date(y, m - 1, d));
     setShowDatePicker(false);
   }, []);
 
@@ -690,20 +703,14 @@ export default function DepartureBoardModal({
         {/* Date Picker */}
         {showDatePicker && (
           <View style={styles.datePickerContainer}>
-            <DateTimePicker
-              value={selectedDate}
-              mode="date"
-              display={Platform.OS === 'ios' ? 'inline' : 'default'}
-              onChange={handleDateChange}
-              minimumDate={new Date()}
-              themeVariant="dark"
-              accentColor="#FFFFFF"
+            <Calendar
+              theme={calendarTheme}
+              markedDates={calendarMarkedDates}
+              minDate={calendarMinDate}
+              onDayPress={handleDayPress}
+              hideExtraDays
+              enableSwipeMonths
             />
-            {Platform.OS === 'ios' && (
-              <TouchableOpacity style={styles.datePickerDoneButton} onPress={() => { hapticLight(); handleDatePickerDone(); }}>
-                <Text style={styles.datePickerDoneText}>Done</Text>
-              </TouchableOpacity>
-            )}
           </View>
         )}
 
@@ -922,17 +929,7 @@ const styles = StyleSheet.create({
     backgroundColor: AppColors.background.tertiary,
     borderRadius: BorderRadius.md,
     overflow: 'hidden',
-  },
-  datePickerDoneButton: {
-    alignItems: 'center',
-    paddingVertical: Spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: AppColors.border.primary,
-  },
-  datePickerDoneText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: AppColors.accent,
+    padding: Spacing.md,
   },
   searchContainer: {
     flexDirection: 'row',
