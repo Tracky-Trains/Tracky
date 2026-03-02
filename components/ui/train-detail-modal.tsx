@@ -1,7 +1,8 @@
 import React from 'react';
-import { ActivityIndicator, Dimensions, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Dimensions, Image, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { ScrollView } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
+import FontAwesome6 from 'react-native-vector-icons/FontAwesome6';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppColors, Spacing } from '../../constants/theme';
@@ -449,12 +450,15 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
             <>
               <View style={styles.fullWidthLine} />
               <View style={styles.statusSection}>
-                <Ionicons 
-                  name={isLiveTrain ? "train" : "time-outline"} 
-                  size={20} 
-                  color={COLORS.primary} 
-                  style={{ marginRight: 8 }} 
-                />
+                {isLiveTrain ? (
+                  trainData?.routeName?.toLowerCase().includes('acela') ? (
+                    <Ionicons name="train" size={20} color={COLORS.primary} style={{ marginRight: 8 }} />
+                  ) : (
+                    <FontAwesome6 name="train" size={18} color={COLORS.primary} style={{ marginRight: 8 }} />
+                  )
+                ) : (
+                  <Ionicons name="time-outline" size={20} color={COLORS.primary} style={{ marginRight: 8 }} />
+                )}
                 <Text style={styles.statusText}>
                   {isLiveTrain ? 'Train is en route and ' : ''}
                   {countdown.past ? 'Departed ' : 'Departs in '}
@@ -542,7 +546,11 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
             activeOpacity={0.7}
           >
             <View style={styles.expandableHeader}>
-              <Ionicons name="train-outline" size={20} color={COLORS.primary} />
+              {trainData?.routeName?.toLowerCase().includes('acela') ? (
+                <Ionicons name="train" size={20} color={COLORS.primary} />
+              ) : (
+                <FontAwesome6 name="train" size={18} color={COLORS.primary} />
+              )}
               <Text style={styles.expandableTitle}>Where's My Train?</Text>
               <Ionicons 
                 name={isWhereIsMyTrainExpanded ? "chevron-up" : "chevron-down"} 
@@ -555,21 +563,6 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
           {/* Expanded Route Details */}
           {isWhereIsMyTrainExpanded && allStops.length > 0 && (
             <View style={styles.expandedContent}>
-              {/* Full Route Status */}
-              <View style={styles.expandedInfo}>
-                <View style={styles.statusBadge}>
-                  <Ionicons name="checkmark-circle" size={16} color="#34C759" />
-                  <Text style={styles.statusBadgeText}>
-                    {isLiveTrain ? 'EN ROUTE' : 'SCHEDULED'}
-                  </Text>
-                </View>
-                {isLiveTrain && nextStopIndex > 0 && (
-                  <Text style={styles.expandedSubtext}>
-                    Train is {nextStopIndex} {pluralize(nextStopIndex, 'stop')} into journey
-                  </Text>
-                )}
-              </View>
-
               {/* All Stops Timeline */}
               <View style={styles.fullRouteTimeline}>
                 {allStops.map((stop, index) => {
@@ -580,34 +573,50 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
 
                   return (
                     <View key={index} style={styles.timelineStop}>
-                      {!isOrigin && <View style={[styles.timelineConnector, isPast && styles.timelineConnectorPast]} />}
-                      {!isDest && <View style={[styles.timelineConnectorBottom, isPast && styles.timelineConnectorPast]} />}
+                      {!isOrigin && (isPast || isCurrent) && <View style={[styles.timelineConnector, styles.timelineConnectorPast]} />}
+                      {!isOrigin && !(isPast || isCurrent) && <View style={styles.timelineConnectorGap} />}
+                      {isCurrent && !isOrigin && (
+                        <View style={styles.timelineTrainPosition}>
+                          {trainData?.routeName?.toLowerCase().includes('acela') ? (
+                            <Ionicons name="train" size={14} color={COLORS.primary} />
+                          ) : (
+                            <FontAwesome6 name="train" size={12} color={COLORS.primary} />
+                          )}
+                        </View>
+                      )}
+                      {!isDest && isPast && <View style={[styles.timelineConnectorBottom, styles.timelineConnectorPast]} />}
+                      {!isDest && !isPast && <View style={styles.timelineConnectorBottomGap} />}
                       <View style={styles.timelineStopRow}>
                         <View style={styles.timelineMarker}>
-                          {isCurrent ? (
-                            <Ionicons name="train" size={12} color={COLORS.primary} />
-                          ) : (
-                            <View style={[styles.timelineDot, isPast && styles.timelineDotPast]} />
-                          )}
+                          <View style={[styles.timelineDot, isPast && styles.timelineDotPast]} />
                         </View>
                         <TouchableOpacity
                           style={styles.timelineStopInfo}
                           onPress={() => handleStationPress(stop.code)}
                           activeOpacity={0.7}
                         >
-                          <Text style={[styles.timelineStopName, isPast && styles.timelineTextPast]}>
+                          <Text style={[styles.timelineStopName, isPast && styles.timelineTextPast, isCurrent && styles.timelineTextCurrent]}>
                             {stop.name}
-                            {isCurrent && <Text style={styles.currentStopBadge}> NEXT</Text>}
                           </Text>
+                          {isCurrent && (() => {
+                            const now = new Date();
+                            const currentMinutes = now.getHours() * 60 + now.getMinutes();
+                            const stopMinutes = timeToMinutes(stop.time) + stop.dayOffset * 24 * 60;
+                            const diffMin = Math.max(0, Math.round(stopMinutes - currentMinutes));
+                            const arrivalText = diffMin >= 60
+                              ? `Arrival in ${Math.floor(diffMin / 60)}h${diffMin % 60 > 0 ? `${diffMin % 60}m` : ''}`
+                              : `Arrival in ${diffMin} min`;
+                            return <Text style={styles.arrivalCountdown}>{arrivalText}</Text>;
+                          })()}
                           <View style={styles.timelineStopCodeRow}>
-                            <Text style={[styles.timelineStopCode, isPast && styles.timelineTextPast]}>
+                            <Text style={[styles.timelineStopCode, isPast && styles.timelineTextPast, isCurrent && styles.timelineTextCurrent]}>
                               {stop.code}
                             </Text>
                             {stopWeather[stop.code] && (
                               <>
-                                <Text style={[styles.timelineStopCode, isPast && styles.timelineTextPast]}> • </Text>
-                                <Ionicons name={stopWeather[stop.code].icon as any} size={11} color={COLORS.secondary} style={isPast ? { opacity: 0.6 } : undefined} />
-                                <Text style={[styles.timelineStopCode, isPast && styles.timelineTextPast]}> {stopWeather[stop.code].temp}°{tempUnit}</Text>
+                                <Text style={[styles.timelineStopCode, isPast && styles.timelineTextPast, isCurrent && styles.timelineTextCurrent]}> • </Text>
+                                <Ionicons name={stopWeather[stop.code].icon as any} size={11} color={isCurrent ? '#FFFFFF' : COLORS.secondary} style={isPast ? { opacity: 0.6 } : undefined} />
+                                <Text style={[styles.timelineStopCode, isPast && styles.timelineTextPast, isCurrent && styles.timelineTextCurrent]}> {stopWeather[stop.code].temp}°{tempUnit}</Text>
                               </>
                             )}
                           </View>
@@ -618,10 +627,12 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
                           style={{
                             ...styles.timelineStopTime,
                             ...(isPast ? styles.timelineTextPast : {}),
+                            ...(isCurrent ? { color: '#FFFFFF', fontWeight: 'bold' as const } : {}),
                           }}
                           superscriptStyle={{
                             ...styles.timelineStopTimeSuperscript,
                             ...(isPast ? styles.timelineTextPast : {}),
+                            ...(isCurrent ? { color: '#FFFFFF', fontWeight: 'bold' as const } : {}),
                           }}
                         />
                       </View>
@@ -629,6 +640,7 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
                   );
                 })}
               </View>
+              <Text style={styles.weatherNote}>Weather is calculated at each stop's scheduled arrival time.</Text>
             </View>
           )}
 
@@ -730,6 +742,27 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
               )}
             </View>
           </View>
+
+          <View style={styles.fullWidthLine} />
+
+          {/* Help Section */}
+          <View style={styles.helpSection}>
+            <Text style={styles.sectionTitle}>Help</Text>
+            <TouchableOpacity
+              style={styles.infoCard}
+              activeOpacity={0.7}
+              onPress={() => Linking.openURL('mailto:him@jasonxu.me?subject=Incorrect%20Tracky%20Data')}
+            >
+              <View style={styles.infoCardIcon}>
+                <Ionicons name="chatbubble-ellipses-outline" size={24} color={COLORS.primary} />
+              </View>
+              <View style={styles.infoCardContent}>
+                <Text style={styles.infoCardTitle}>Report a Bug/Bad Data</Text>
+                <Text style={styles.infoCardSubtext}>Something not right? Let us know.</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={COLORS.secondary} style={{ alignSelf: 'center' }} />
+            </TouchableOpacity>
+          </View>
         </ScrollView>
       </Animated.View>
     </View>
@@ -743,7 +776,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: Spacing.xl,
-    paddingTop: 0,
+    paddingTop: Spacing.xs,
     paddingBottom: Spacing.md,
     borderBottomWidth: 0,
     borderBottomColor: 'transparent',
@@ -760,7 +793,7 @@ const styles = StyleSheet.create({
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: Spacing.md,
   },
   headerLogo: {
     width: 40,
@@ -810,8 +843,8 @@ const styles = StyleSheet.create({
   statusSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
   },
   statusText: {
     fontSize: 16,
@@ -825,8 +858,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   journeySection: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
   },
   stationRow: {
     flexDirection: 'row',
@@ -843,7 +876,7 @@ const styles = StyleSheet.create({
     height: 24,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: Spacing.md,
   },
   stationInfo: {
     flex: 1,
@@ -869,25 +902,25 @@ const styles = StyleSheet.create({
   journeyInfoBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    marginLeft: 12,
+    paddingVertical: Spacing.md,
+    marginLeft: Spacing.md,
   },
   verticalLine: {
     width: 2,
     height: '100%',
     backgroundColor: COLORS.tertiary,
-    marginRight: 20,
+    marginRight: Spacing.xl,
   },
   journeyDetails: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: Spacing.sm,
     flex: 1,
   },
   journeyDetailItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: Spacing.xs,
   },
   journeyDetailText: {
     fontSize: 14,
@@ -895,14 +928,14 @@ const styles = StyleSheet.create({
     color: COLORS.secondary,
   },
   expandableSection: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
     backgroundColor: COLORS.background.secondary,
   },
   expandableHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: Spacing.md,
   },
   expandableTitle: {
     fontSize: 18,
@@ -912,36 +945,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   expandedContent: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.lg,
     backgroundColor: COLORS.background.secondary,
   },
-  expandedInfo: {
-    marginBottom: 16,
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: COLORS.background.primary,
-    borderRadius: 16,
-    alignSelf: 'flex-start',
-    marginBottom: 8,
-  },
-  statusBadgeText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#34C759',
-  },
-  expandedSubtext: {
-    fontSize: 14,
-    fontFamily: FONTS.family,
-    color: COLORS.secondary,
-  },
   fullRouteTimeline: {
-    marginTop: 8,
   },
   timelineStop: {
     position: 'relative',
@@ -954,6 +963,14 @@ const styles = StyleSheet.create({
     height: 24,
     backgroundColor: COLORS.tertiary,
   },
+  timelineConnectorGap: {
+    position: 'absolute',
+    left: 11,
+    top: 0,
+    width: 2,
+    height: 19,
+    backgroundColor: COLORS.tertiary,
+  },
   timelineConnectorBottom: {
     position: 'absolute',
     left: 11,
@@ -962,33 +979,54 @@ const styles = StyleSheet.create({
     width: 2,
     backgroundColor: COLORS.tertiary,
   },
+  timelineConnectorBottomGap: {
+    position: 'absolute',
+    left: 11,
+    top: 29,
+    bottom: 0,
+    width: 2,
+    backgroundColor: COLORS.tertiary,
+  },
   timelineConnectorPast: {
-    backgroundColor: COLORS.secondary,
+    backgroundColor: COLORS.primary,
   },
   timelineStopRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    paddingVertical: 12,
+    paddingVertical: Spacing.md,
   },
   timelineMarker: {
     width: 24,
     height: 24,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: Spacing.md,
   },
   timelineDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.tertiary,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 2,
+    borderColor: COLORS.tertiary,
+    backgroundColor: 'transparent',
   },
   timelineDotPast: {
-    backgroundColor: COLORS.secondary,
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primary,
+  },
+  timelineTrainPosition: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2,
   },
   timelineStopInfo: {
     flex: 1,
-    marginRight: 12,
+    marginRight: Spacing.md,
   },
   timelineStopName: {
     fontSize: 15,
@@ -996,10 +1034,15 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.family,
     color: COLORS.primary,
   },
-  currentStopBadge: {
-    fontSize: 10,
+  arrivalCountdown: {
+    fontSize: 12,
     fontWeight: 'bold',
-    color: COLORS.tertiary,
+    color: '#FFFFFF',
+    marginTop: 1,
+  },
+  timelineTextCurrent: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
   },
   timelineStopCode: {
     fontSize: 12,
@@ -1026,24 +1069,31 @@ const styles = StyleSheet.create({
     color: COLORS.secondary,
     opacity: 0.6,
   },
+  weatherNote: {
+    fontSize: 11,
+    color: COLORS.secondary,
+    opacity: 0.6,
+    textAlign: 'center',
+    marginTop: Spacing.sm,
+  },
   goodToKnowSection: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
   },
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     fontFamily: FONTS.family,
     color: COLORS.primary,
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   infoCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     backgroundColor: COLORS.background.secondary,
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    padding: Spacing.lg,
+    marginBottom: Spacing.md,
     borderWidth: 1,
     borderColor: COLORS.border.primary,
   },
@@ -1054,7 +1104,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: COLORS.tertiary,
     borderRadius: 20,
-    marginRight: 12,
+    marginRight: Spacing.md,
   },
   infoCardContent: {
     flex: 1,
@@ -1064,7 +1114,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontFamily: FONTS.family,
     color: COLORS.primary,
-    marginBottom: 4,
+    marginBottom: Spacing.xs,
   },
   infoCardSubtext: {
     fontSize: 14,
@@ -1072,28 +1122,28 @@ const styles = StyleSheet.create({
     color: COLORS.secondary,
   },
   historySection: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
   },
   historyRouteSubtitle: {
     fontSize: 16,
     fontFamily: FONTS.family,
     color: COLORS.secondary,
-    marginTop: -8,
-    marginBottom: 16,
+    marginTop: -Spacing.sm,
+    marginBottom: Spacing.lg,
     fontWeight: '400',
   },
   historyCard: {
     backgroundColor: COLORS.background.secondary,
     borderRadius: 16,
-    padding: 24,
+    padding: Spacing.xxl,
     borderWidth: 1,
     borderColor: COLORS.border.primary,
   },
   historyStats: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   historyStat: {
     alignItems: 'flex-start',
@@ -1103,7 +1153,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: FONTS.family,
     color: COLORS.secondary,
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
     fontWeight: '400',
   },
   historyStatValueRow: {
@@ -1119,27 +1169,31 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.family,
     color: COLORS.primary,
   },
+  helpSection: {
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
+  },
   historyEmptyText: {
     fontSize: 14,
     fontFamily: FONTS.family,
     color: COLORS.secondary,
     textAlign: 'left',
-    paddingTop: 8,
+    paddingTop: Spacing.sm,
     fontWeight: '400',
   },
   infoSection: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
   },
   infoHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: Spacing.xs,
   },
   stationTouchable: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: 4,
+    marginLeft: Spacing.xs,
   },
   locationCode: {
     fontSize: 16,
@@ -1157,20 +1211,20 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontFamily: FONTS.family,
     color: COLORS.primary,
-    marginBottom: 6,
+    marginBottom: Spacing.xs,
   },
   timeSuperscript: {
     fontSize: 14,
     fontWeight: '600',
     color: COLORS.secondary,
-    marginLeft: 4,
+    marginLeft: Spacing.xs,
     marginTop: 0,
   },
   durationLineRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 0,
-    gap: 8,
+    gap: Spacing.sm,
   },
   durationContentRow: {
     flexDirection: 'row',
@@ -1185,6 +1239,6 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 1,
     backgroundColor: COLORS.tertiary,
-    marginLeft: 12,
+    marginLeft: Spacing.md,
   },
 });

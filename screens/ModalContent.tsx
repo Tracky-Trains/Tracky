@@ -1,5 +1,6 @@
 import React, { useContext, useEffect, useRef, useState } from 'react';
 import { Alert, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { TrainList } from '../components/TrainList';
 import { TwoStationSearch } from '../components/TwoStationSearch';
@@ -20,8 +21,14 @@ export interface ModalContentHandle {
 }
 
 export const ModalContent = React.forwardRef<ModalContentHandle, { onTrainSelect?: (train: Train) => void; onOpenProfile?: () => void }>(function ModalContent({ onTrainSelect, onOpenProfile }, ref) {
-  const { isFullscreen, isCollapsed, scrollOffset, panGesture, snapToPoint } =
+  const { isFullscreen, isCollapsed, scrollOffset, contentOpacity, panRef, snapToPoint } =
     useContext(SlideUpModalContext);
+
+  const fadeAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      opacity: contentOpacity.value,
+    };
+  });
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const { savedTrains, setSavedTrains, setSelectedTrain } = useTrainContext();
   const { refresh: refreshFrequentlyUsed } = useFrequentlyUsed();
@@ -189,11 +196,7 @@ export const ModalContent = React.forwardRef<ModalContentHandle, { onTrainSelect
       <View>
         <View style={styles.titleRow}>
           <Text style={styles.title}>
-            {isLoading
-              ? 'Loading'
-              : isSearchFocused
-                ? 'Add Train'
-                : 'My Trains'}
+            {isSearchFocused ? 'Add Train' : 'My Trains'}
           </Text>
         </View>
         {!isSearchFocused && !isLoading && (
@@ -209,16 +212,7 @@ export const ModalContent = React.forwardRef<ModalContentHandle, { onTrainSelect
           </TouchableOpacity>
         )}
 
-        {isLoading && (
-          <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 32 }}>
-            <Ionicons name="train" size={48} color={COLORS.secondary} style={{ marginBottom: 16 }} />
-            <Text style={[styles.noTrainsText, { marginBottom: 8, fontSize: 14 }]}>
-              Loading cached data...
-            </Text>
-          </View>
-        )}
-
-        {isSearchFocused && <Text style={styles.subtitle}>Enter departure and arrival stations</Text>}
+        {isSearchFocused && <Text style={styles.subtitle}>Search by train number, route, or station</Text>}
 
         {/* Search Button (when not searching) */}
         {!isLoading && !isSearchFocused && (
@@ -236,37 +230,40 @@ export const ModalContent = React.forwardRef<ModalContentHandle, { onTrainSelect
         )}
       </View>
 
-      {/* Search lives outside ScrollView so the input stays fixed */}
-      {isSearchFocused && !isCollapsed && (
-        <TwoStationSearch onSelectTrip={handleSelectTrip} onClose={handleCloseSearch} />
-      )}
+      <Animated.View style={[{ flex: 1 }, fadeAnimatedStyle]} pointerEvents={isCollapsed ? 'none' : 'auto'}>
+        {/* Search lives outside ScrollView so the input stays fixed */}
+        {isSearchFocused && !isCollapsed && (
+          <TwoStationSearch onSelectTrip={handleSelectTrip} onClose={handleCloseSearch} />
+        )}
 
-      {/* Scrollable Content */}
-      {!isSearchFocused && (
-        <ScrollView
-          style={{ flex: 1 }}
-          showsVerticalScrollIndicator={false}
-          scrollEnabled={isFullscreen}
-          onScroll={e => {
-            const offsetY = e.nativeEvent.contentOffset.y;
-            scrollOffset.value = offsetY;
-          }}
-          scrollEventThrottle={16}
-          simultaneousHandlers={panGesture}
-          keyboardShouldPersistTaps="handled"
-        >
-          {!isLoading && (
-            <TrainList
-              flights={flights}
-              onTrainSelect={train => {
-                setSelectedTrain(train);
-                if (typeof onTrainSelect === 'function') onTrainSelect(train);
-              }}
-              onDeleteTrain={handleDeleteTrain}
-            />
-          )}
-        </ScrollView>
-      )}
+        {/* Scrollable Content */}
+        {!isSearchFocused && (
+          <ScrollView
+            style={{ flex: 1 }}
+            showsVerticalScrollIndicator={false}
+            scrollEnabled={isFullscreen}
+            nestedScrollEnabled={true}
+            onScroll={e => {
+              const offsetY = e.nativeEvent.contentOffset.y;
+              scrollOffset.value = offsetY;
+            }}
+            scrollEventThrottle={16}
+            waitFor={panRef}
+            keyboardShouldPersistTaps="handled"
+          >
+            {!isLoading && (
+              <TrainList
+                flights={flights}
+                onTrainSelect={train => {
+                  setSelectedTrain(train);
+                  if (typeof onTrainSelect === 'function') onTrainSelect(train);
+                }}
+                onDeleteTrain={handleDeleteTrain}
+              />
+            )}
+          </ScrollView>
+        )}
+      </Animated.View>
     </View>
   );
 });

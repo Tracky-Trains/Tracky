@@ -417,6 +417,172 @@ export class GTFSParser {
   }
 
   /**
+   * Unified search returning categorized results for the initial search bar.
+   * Returns trains, routes, and stations in separate arrays.
+   */
+  searchUnified(query: string): { trains: SearchResult[]; routes: SearchResult[]; stations: SearchResult[] } {
+    const queryLower = query.toLowerCase().trim();
+    if (!queryLower) return { trains: [], routes: [], stations: [] };
+
+    const trains: SearchResult[] = [];
+    const routes: SearchResult[] = [];
+    const stations: SearchResult[] = [];
+
+    // --- Train number matching ---
+    // Extract a numeric portion for train number prefix matching
+    let trainNumberQuery = '';
+    if (queryLower.startsWith('amt')) {
+      trainNumberQuery = queryLower.substring(3);
+    } else if (/^\d+$/.test(queryLower)) {
+      trainNumberQuery = queryLower;
+    } else {
+      const nameTrainMatch = queryLower.match(/^([a-z]+)(\d{1,4})$/);
+      if (nameTrainMatch) {
+        trainNumberQuery = nameTrainMatch[2];
+      }
+    }
+
+    if (trainNumberQuery) {
+      // Prefix match: "21" matches 21, 210, 2150, etc.
+      const seenNumbers = new Set<string>();
+      this.tripsByNumber.forEach((trips, trainNum) => {
+        if (trainNum.startsWith(trainNumberQuery) && !seenNumbers.has(trainNum)) {
+          seenNumbers.add(trainNum);
+          const trip = trips[0];
+          if (trip) {
+            const routeName = this.getRouteName(trip.route_id);
+            const displayName = routeName !== 'Unknown Route'
+              ? `${routeName} ${trip.trip_short_name}`
+              : `Train ${trip.trip_short_name}`;
+            trains.push({
+              id: `train-num-${trainNum}`,
+              name: displayName,
+              subtitle: trip.trip_headsign || '',
+              type: 'train',
+              data: trip,
+            });
+          }
+        }
+      });
+    }
+
+    // Also match train numbers where the route name matches the alpha part
+    if (queryLower.match(/^[a-z]/)) {
+      const seenNumbers = new Set<string>(trains.map(t => {
+        const trip = t.data as Trip;
+        return trip.trip_short_name || '';
+      }));
+      this.tripsByNumber.forEach((trips, trainNum) => {
+        if (seenNumbers.has(trainNum)) return;
+        const trip = trips[0];
+        if (!trip) return;
+        const routeName = this.getRouteName(trip.route_id).toLowerCase();
+        const displayName = routeName !== 'unknown route'
+          ? `${this.getRouteName(trip.route_id)} ${trip.trip_short_name}`
+          : `Train ${trip.trip_short_name}`;
+        // Match if route name starts with query or query matches "routename + number"
+        if (routeName.startsWith(queryLower) || displayName.toLowerCase().includes(queryLower)) {
+          seenNumbers.add(trainNum);
+          trains.push({
+            id: `train-num-${trainNum}`,
+            name: displayName,
+            subtitle: trip.trip_headsign || '',
+            type: 'train',
+            data: trip,
+          });
+        }
+      });
+    }
+
+    // --- Route matching ---
+    this.routes.forEach(route => {
+      if (
+        route.route_long_name.toLowerCase().includes(queryLower) ||
+        route.route_short_name?.toLowerCase().includes(queryLower)
+      ) {
+        routes.push({
+          id: `route-${route.route_id}`,
+          name: route.route_long_name,
+          subtitle: route.route_short_name || '',
+          type: 'route',
+          data: route,
+        });
+      }
+    });
+
+    // --- Station matching ---
+    this.stops.forEach(stop => {
+      if (
+        stop.stop_name.toLowerCase().includes(queryLower) ||
+        stop.stop_id.toLowerCase().includes(queryLower)
+      ) {
+        stations.push({
+          id: `stop-${stop.stop_id}`,
+          name: stop.stop_name,
+          subtitle: stop.stop_id,
+          type: 'station',
+          data: stop,
+        });
+      }
+    });
+
+    return {
+      trains: trains.slice(0, 5),
+      routes: routes.slice(0, 5),
+      stations: stations.slice(0, 8),
+    };
+  }
+
+  /**
+   * Given a train number and date, find the specific Trip active on that date.
+   * Falls back to the first trip for the train number if no calendar match.
+   */
+  getTripForTrainOnDate(trainNumber: string, date: Date): Trip | undefined {
+    const trips = this.tripsByNumber.get(trainNumber);
+    if (!trips || trips.length === 0) return undefined;
+
+    // Try to find a trip whose service is active on the given date
+    const activeTrip = trips.find(trip => this.isServiceActiveOnDate(trip.service_id, date));
+    return activeTrip || trips[0];
+  }
+
+  /**
+   * Get all unique train numbers (trip_short_name) that belong to a given route_id.
+   * Returns array of { trainNumber, displayName, headsign }.
+   */
+  getTrainNumbersForRoute(routeId: string): Array<{ trainNumber: string; displayName: string; headsign: string }> {
+    const results: Array<{ trainNumber: string; displayName: string; headsign: string }> = [];
+    const seen = new Set<string>();
+    const routeName = this.getRouteName(routeId);
+
+    this.tripsByNumber.forEach((trips, trainNum) => {
+      if (seen.has(trainNum)) return;
+      const trip = trips.find(t => t.route_id === routeId);
+      if (trip) {
+        seen.add(trainNum);
+        const displayName = routeName !== 'Unknown Route'
+          ? `${routeName} ${trainNum}`
+          : `Train ${trainNum}`;
+        results.push({
+          trainNumber: trainNum,
+          displayName,
+          headsign: trip.trip_headsign || '',
+        });
+      }
+    });
+
+    // Sort by train number numerically
+    results.sort((a, b) => {
+      const numA = parseInt(a.trainNumber, 10);
+      const numB = parseInt(b.trainNumber, 10);
+      if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+      return a.trainNumber.localeCompare(b.trainNumber);
+    });
+
+    return results;
+  }
+
+  /**
    * Search for stations only (for the two-station search flow)
    */
   searchStations(query: string): Stop[] {

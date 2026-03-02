@@ -1,40 +1,41 @@
 import * as Location from 'expo-location';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Animated, StyleSheet, Text, View } from 'react-native';
 import MapView, { PROVIDER_DEFAULT } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { RefreshBubble } from '../components/ui/RefreshBubble';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import { AnimatedRoute } from '../components/map/AnimatedRoute';
 import { AnimatedStationMarker } from '../components/map/AnimatedStationMarker';
 import { LiveTrainMarker } from '../components/map/LiveTrainMarker';
 import MapSettingsPill, { MapType, RouteMode, StationMode, TrainMode } from '../components/map/MapSettingsPill';
 import DepartureBoardModal from '../components/ui/departure-board-modal';
 import ProfileModal from '../components/ui/ProfileModal';
+import { RefreshBubble } from '../components/ui/RefreshBubble';
 import SettingsModal from '../components/ui/SettingsModal';
 import SlideUpModal from '../components/ui/slide-up-modal';
 import TrainDetailModal from '../components/ui/train-detail-modal';
 import { AppColors } from '../constants/theme';
-import { light as hapticLight } from '../utils/haptics';
 import { GTFSRefreshProvider, useGTFSRefresh } from '../context/GTFSRefreshContext';
 import { ModalProvider, useModalContext } from '../context/ModalContext';
 import { TrainProvider, useTrainContext } from '../context/TrainContext';
 import { UnitsProvider } from '../context/UnitsContext';
+import { useBatchedItems } from '../hooks/useBatchedItems';
 import { useLiveTrains } from '../hooks/useLiveTrains';
 import { useRealtime } from '../hooks/useRealtime';
-import { useBatchedItems } from '../hooks/useBatchedItems';
 import { useShapes } from '../hooks/useShapes';
 import { useStations } from '../hooks/useStations';
 import { TrainAPIService } from '../services/api';
 import type { ViewportBounds } from '../services/shape-loader';
 import { TrainStorageService } from '../services/storage';
 import type { Stop, Train } from '../types/train';
-import { gtfsParser } from '../utils/gtfs-parser';
-import { getRouteColor, getStrokeWidthForZoom } from '../utils/route-colors';
 import { ClusteringConfig } from '../utils/clustering-config';
+import { gtfsParser } from '../utils/gtfs-parser';
+import { light as hapticLight } from '../utils/haptics';
+import { logger } from '../utils/logger';
+import { getRouteColor, getStrokeWidthForZoom } from '../utils/route-colors';
 import { clusterStations, getStationAbbreviation } from '../utils/station-clustering';
 import { clusterTrains } from '../utils/train-clustering';
-import { logger } from '../utils/logger';
-import { ErrorBoundary } from '../components/ErrorBoundary';
 import { ModalContent, ModalContentHandle } from './ModalContent';
 import { styles } from './styles';
 
@@ -71,10 +72,34 @@ function getLatitudeOffsetForModal(latitudeDelta: number, modalSnap: 'min' | 'ha
   return 0;
 }
 
+function LoadingOverlay({ visible }: { visible: boolean }) {
+  const opacity = useRef(new Animated.Value(1)).current;
+  const [mounted, setMounted] = useState(true);
+
+  useEffect(() => {
+    if (!visible) {
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: 400,
+        useNativeDriver: true,
+      }).start(() => setMounted(false));
+    }
+  }, [visible, opacity]);
+
+  if (!mounted) return null;
+
+  return (
+    <Animated.View style={[loadingStyles.overlay, { opacity }]} pointerEvents={visible ? 'auto' : 'none'}>
+      <Ionicons name="train" size={64} color={AppColors.secondary} style={loadingStyles.icon} />
+      <Text style={loadingStyles.copyright}>Tracky - Made with ❤ by Jason</Text>
+    </Animated.View>
+  );
+}
+
 function MapScreenInner() {
   const mapRef = useRef<MapView>(null);
   const modalContentRef = useRef<ModalContentHandle>(null);
-  const { triggerRefresh } = useGTFSRefresh();
+  const { triggerRefresh, isLoadingCache } = useGTFSRefresh();
 
   // Use centralized modal context
   const {
@@ -693,7 +718,7 @@ function MapScreenInner() {
       {/* Main modal - always mounted, content conditional */}
       <SlideUpModal
         ref={mainModalRef}
-        minSnapPercent={0.35}
+        minSnapPercent={0.15}
         initialSnap={savedTrains.length === 0 ? 'min' : 'half'}
         onDismiss={() => handleModalDismissed('main')}
         onSnapChange={handleSnapChange}
@@ -769,7 +794,7 @@ function MapScreenInner() {
       {/* Settings modal - always mounted, starts hidden, content conditional */}
       <SlideUpModal
         ref={settingsModalRef}
-        minSnapPercent={0.50}
+        minSnapPercent={0.15}
         initialSnap={getInitialSnap('settings')}
         startHidden
         onDismiss={() => handleModalDismissed('settings')}
@@ -784,9 +809,34 @@ function MapScreenInner() {
           />
         )}
       </SlideUpModal>
+
+      {/* Full-page loading overlay while GTFS cache loads */}
+      <LoadingOverlay visible={isLoadingCache} />
     </View>
   );
 }
+
+const loadingStyles = StyleSheet.create({
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#000',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 99999,
+    elevation: 99999,
+  },
+  icon: {
+    marginBottom: 16,
+  },
+  copyright: {
+    position: 'absolute',
+    bottom: 40,
+    color: AppColors.secondary,
+    fontSize: 12,
+    fontWeight: '400',
+    opacity: 0.6,
+  },
+});
 
 export default function MapScreen() {
   return (

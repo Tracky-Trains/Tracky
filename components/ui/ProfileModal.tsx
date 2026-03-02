@@ -229,7 +229,7 @@ export default function ProfileModal({ onClose, onOpenSettings }: ProfileModalPr
     setHistory(updated);
   }, []);
 
-  const stats = useMemo(() => 
+  const stats = useMemo(() =>
     calculateProfileStats(history, selectedYear || undefined),
     [history, selectedYear]
   );
@@ -468,6 +468,7 @@ export default function ProfileModal({ onClose, onOpenSettings }: ProfileModalPr
         showsVerticalScrollIndicator={false}
         scrollEnabled={isFullscreen}
         bounces={false}
+        nestedScrollEnabled={true}
         onScroll={e => {
           scrollOffset.value = e.nativeEvent.contentOffset.y;
         }}
