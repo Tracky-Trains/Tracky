@@ -354,7 +354,7 @@ export class RealtimeService {
     if (delayMinutes > 0) {
       return `Delayed ${delayMinutes}m`;
     }
-    return `Early ${Math.abs(delayMinutes)}m`;
+    return `${Math.abs(delayMinutes)}m early`;
   }
 
   /**

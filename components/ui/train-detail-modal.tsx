@@ -7,7 +7,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppColors, CloseButtonStyle, Spacing } from '../../constants/theme';
 import { TrainIcon } from '../TrainIcon';
-import { addDelayToTime, formatDelayStatus, formatTimeWithDayOffset, getDelayColorKey, timeToMinutes } from '../../utils/time-formatting';
+import { addDelayToTime, formatDelayStatus, formatTimeWithDayOffset, getDelayColorKey, parseTimeToDate, timeToMinutes } from '../../utils/time-formatting';
 import { RealtimeService } from '../../services/realtime';
 
 import { useTrainContext } from '../../context/TrainContext';
@@ -519,7 +519,7 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
           {/* Departure / Arrival Board */}
           <View style={styles.departArriveBoard}>
             {/* Departure Info */}
-            <View style={styles.infoSection}>
+            <View style={[styles.infoSection, { paddingBottom: 0 }]}>
               <View style={styles.infoHeader}>
                 <MaterialCommunityIcons name="arrow-top-right" size={16} color={AppColors.primary} />
                 <TouchableOpacity
@@ -551,6 +551,11 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
                     {trainData.daysAway <= 0 && dDelay != null && (
                       <Text style={[styles.delayStatusText, colorKey === 'delayed' ? styles.delayStatusLate : styles.delayStatusEarly]}>
                         {formatDelayStatus(dDelay)}
+                        {countdown && (
+                          <Text style={styles.countdownInline}>
+                            {' · '}{countdown.past ? `Departed ${countdown.value} ${countdown.unit.toLowerCase()} ago` : `Departs in ${countdown.value} ${countdown.unit.toLowerCase()}`}
+                          </Text>
+                        )}
                       </Text>
                     )}
                   </>
@@ -583,7 +588,7 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
             </View>
 
             {/* Arrival Info */}
-            <View style={styles.infoSection}>
+            <View style={[styles.infoSection, { paddingTop: 0 }]}>
               <View style={styles.infoHeader}>
                 <MaterialCommunityIcons name="arrow-bottom-left" size={16} color={AppColors.primary} />
                 <TouchableOpacity
@@ -600,6 +605,26 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
                 const aDelayed = aDelay && aDelay > 0 ? addDelayToTime(trainData.arriveTime, aDelay, trainData.arriveDayOffset || 0) : undefined;
                 const colorKey = getDelayColorKey(aDelay);
                 const timeColor = colorKey === 'onTime' ? AppColors.success : undefined;
+                // Compute arrival countdown
+                const arriveTime = aDelayed?.time || trainData.arriveTime;
+                const arriveDayOffset = aDelayed?.dayOffset ?? (trainData.arriveDayOffset || 0);
+                const now = new Date();
+                const arriveDate = parseTimeToDate(arriveTime, now);
+                arriveDate.setDate(arriveDate.getDate() + arriveDayOffset);
+                const arrDeltaSec = (arriveDate.getTime() - now.getTime()) / 1000;
+                const arrPast = arrDeltaSec < 0;
+                const arrAbsSec = Math.abs(arrDeltaSec);
+                let arrCountdownText = '';
+                if (arrAbsSec >= 3600) {
+                  const h = Math.round(arrAbsSec / 3600);
+                  arrCountdownText = `${h} ${h === 1 ? 'hour' : 'hours'}`;
+                } else if (arrAbsSec >= 60) {
+                  const m = Math.round(arrAbsSec / 60);
+                  arrCountdownText = `${m} ${m === 1 ? 'minute' : 'minutes'}`;
+                } else {
+                  const s = Math.round(arrAbsSec);
+                  arrCountdownText = `${s} ${s === 1 ? 'second' : 'seconds'}`;
+                }
                 return (
                   <>
                     <TimeDisplay
@@ -615,6 +640,9 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
                     {trainData.daysAway <= 0 && aDelay != null && (
                       <Text style={[styles.delayStatusText, colorKey === 'delayed' ? styles.delayStatusLate : styles.delayStatusEarly]}>
                         {formatDelayStatus(aDelay)}
+                        <Text style={styles.countdownInline}>
+                          {' · '}{arrPast ? `Arrived ${arrCountdownText} ago` : `Arrives in ${arrCountdownText}`}
+                        </Text>
                       </Text>
                     )}
                   </>
@@ -1308,7 +1336,7 @@ const styles = StyleSheet.create({
     marginTop: 0,
   },
   delayStatusText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
     color: AppColors.success,
     marginTop: 2,
@@ -1319,11 +1347,15 @@ const styles = StyleSheet.create({
   delayStatusEarly: {
     color: AppColors.success,
   },
+  countdownInline: {
+    fontWeight: '400',
+    color: AppColors.secondary,
+  },
   durationLineRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: Spacing.lg,
-    marginBottom: -Spacing.sm,
+    marginBottom: Spacing.lg,
     gap: Spacing.sm,
   },
   durationContentRow: {
@@ -1331,7 +1363,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   durationText: {
-    fontSize: 14,
+    fontSize: 12,
     fontFamily: FONTS.family,
     color: AppColors.secondary,
   },

@@ -179,6 +179,6 @@ export function formatDelayShort(delayMinutes: number): string {
  */
 export function formatDelayStatus(delayMinutes: number): string {
   if (delayMinutes > 0) return `Delayed ${formatDurationCompact(delayMinutes)}`;
-  if (delayMinutes < 0) return `Early ${formatDurationCompact(delayMinutes)}`;
+  if (delayMinutes < 0) return `${formatDurationCompact(delayMinutes)} early`;
   return 'On Time';
 }

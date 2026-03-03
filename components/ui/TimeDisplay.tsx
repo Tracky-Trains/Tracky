@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleProp, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
 import { AppColors, Spacing } from '../../constants/theme';
+import { formatDelayStatus } from '../../utils/time-formatting';
 
 interface TimeDisplayProps {
   time: string;
@@ -38,11 +39,7 @@ export default function TimeDisplay({
   hideDelayLabel = false,
 }: TimeDisplayProps) {
   const hasDelay = delayMinutes != null && delayMinutes > 0 && delayedTime;
-  const delayStr = hasDelay
-    ? delayMinutes >= 60
-      ? `+${Math.floor(delayMinutes / 60)}h${delayMinutes % 60 > 0 ? `${delayMinutes % 60}m` : ''}`
-      : `+${delayMinutes}m`
-    : '';
+  const delayStr = hasDelay ? formatDelayStatus(delayMinutes) : '';
 
   if (hasDelay && delayLayout === 'vertical') {
     // Vertical layout: delayed time on top, original time smaller below

@@ -746,6 +746,7 @@ function MapScreenInner() {
               }
             }}
             onOpenProfile={() => navigateToProfile()}
+            isActive={activeModal === 'main'}
           />
         )}
       </SlideUpModal>
