@@ -140,3 +140,45 @@ export function addDelayToTime(timeStr: string, delayMinutes: number, baseDayOff
     dayOffset,
   };
 }
+
+/**
+ * Get the color key for a delay value.
+ * - delayed (> 0): 'delayed'
+ * - on time or early (<= 0): 'onTime'
+ * - no data (null/undefined): null
+ */
+export function getDelayColorKey(delayMinutes: number | null | undefined): 'delayed' | 'onTime' | null {
+  if (delayMinutes == null) return null;
+  return delayMinutes > 0 ? 'delayed' : 'onTime';
+}
+
+/**
+ * Format minutes as a compact duration string.
+ * @example formatDurationCompact(5) => "5m", formatDurationCompact(75) => "1h15m"
+ */
+export function formatDurationCompact(minutes: number): string {
+  const abs = Math.abs(minutes);
+  if (abs >= 60) {
+    const h = Math.floor(abs / 60);
+    const m = abs % 60;
+    return m > 0 ? `${h}h${m}m` : `${h}h`;
+  }
+  return `${abs}m`;
+}
+
+/**
+ * Format a delay as a short label: "+5m", "+1h15m"
+ */
+export function formatDelayShort(delayMinutes: number): string {
+  return `+${formatDurationCompact(delayMinutes)}`;
+}
+
+/**
+ * Format a delay value for display.
+ * @returns "Delayed #h#m", "Early #m", or "On Time"
+ */
+export function formatDelayStatus(delayMinutes: number): string {
+  if (delayMinutes > 0) return `Delayed ${formatDurationCompact(delayMinutes)}`;
+  if (delayMinutes < 0) return `Early ${formatDurationCompact(delayMinutes)}`;
+  return 'On Time';
+}

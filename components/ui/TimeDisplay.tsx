@@ -12,6 +12,10 @@ interface TimeDisplayProps {
   delayMinutes?: number;
   delayedTime?: string;
   delayedDayOffset?: number;
+  // Layout: 'horizontal' (default) = side by side, 'vertical' = stacked (delayed on top, original smaller below)
+  delayLayout?: 'horizontal' | 'vertical';
+  // Hide the (+#m) label next to delayed time
+  hideDelayLabel?: boolean;
 }
 
 /**
@@ -30,16 +34,46 @@ export default function TimeDisplay({
   delayMinutes,
   delayedTime,
   delayedDayOffset,
+  delayLayout = 'horizontal',
+  hideDelayLabel = false,
 }: TimeDisplayProps) {
   const hasDelay = delayMinutes != null && delayMinutes > 0 && delayedTime;
+  const delayStr = hasDelay
+    ? delayMinutes >= 60
+      ? `+${Math.floor(delayMinutes / 60)}h${delayMinutes % 60 > 0 ? `${delayMinutes % 60}m` : ''}`
+      : `+${delayMinutes}m`
+    : '';
 
-  if (hasDelay) {
-    // Show original time with strikethrough, then delayed time
+  if (hasDelay && delayLayout === 'vertical') {
+    // Vertical layout: delayed time on top, original time smaller below
     return (
-      <View style={[styles.delayContainer, containerStyle]}>
-        {/* New delayed time (primary) */}
+      <View style={[styles.delayContainerVertical, containerStyle]}>
         <View style={styles.container}>
           <Text style={[style, styles.delayedTime]}>{delayedTime}</Text>
+          {(delayedDayOffset ?? 0) > 0 && (
+            <Text style={[styles.superscript, superscriptStyle, styles.delayedSuperscript]}>+{delayedDayOffset}</Text>
+          )}
+        </View>
+        <View style={styles.originalTimeRow}>
+          <Text style={[style, styles.originalTimeSmall, styles.delayLabel]}>{delayStr} · </Text>
+          <View style={styles.originalTimeContainer}>
+            <Text style={[style, styles.originalTimeSmall]}>{time}</Text>
+            {dayOffset > 0 && (
+              <Text style={[styles.superscript, superscriptStyle, styles.originalSuperscript, styles.originalSuperscriptSmall]}>+{dayOffset}</Text>
+            )}
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  if (hasDelay) {
+    // Horizontal layout: side by side (default)
+    return (
+      <View style={[styles.delayContainer, containerStyle]}>
+        {/* New delayed time (primary) with delay label */}
+        <View style={styles.container}>
+          <Text style={[style, styles.delayedTime]}>{delayedTime}{!hideDelayLabel ? ` (${delayStr})` : ''}</Text>
           {(delayedDayOffset ?? 0) > 0 && (
             <Text style={[styles.superscript, superscriptStyle, styles.delayedSuperscript]}>+{delayedDayOffset}</Text>
           )}
@@ -85,11 +119,19 @@ const styles = StyleSheet.create({
     alignItems: 'baseline',
     gap: Spacing.sm,
   },
+  delayContainerVertical: {
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+  },
   delayedTime: {
     color: AppColors.delayed,
   },
   delayedSuperscript: {
     color: AppColors.delayed,
+  },
+  originalTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
   },
   originalTimeContainer: {
     flexDirection: 'row',
@@ -99,10 +141,24 @@ const styles = StyleSheet.create({
     textDecorationLine: 'line-through',
     color: AppColors.secondary,
     opacity: 0.7,
+    fontSize: 14,
+    fontWeight: '400',
+  },
+  originalTimeSmall: {
+    textDecorationLine: 'line-through',
+    color: AppColors.secondary,
+    opacity: 0.7,
+    fontSize: 11,
   },
   originalSuperscript: {
     textDecorationLine: 'line-through',
     color: AppColors.secondary,
     opacity: 0.7,
+  },
+  originalSuperscriptSmall: {
+    fontSize: 8,
+  },
+  delayLabel: {
+    textDecorationLine: 'none',
   },
 });

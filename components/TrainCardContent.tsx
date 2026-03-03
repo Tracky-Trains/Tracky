@@ -3,7 +3,13 @@ import { Image, StyleSheet, Text, View } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppColors, FontSizes, Spacing } from '../constants/theme';
 import { COLORS, styles } from '../screens/styles';
+import { getDelayColorKey } from '../utils/time-formatting';
 import TimeDisplay from './ui/TimeDisplay';
+
+const DELAY_COLORS = {
+  delayed: AppColors.delayed,
+  onTime: AppColors.success,
+} as const;
 
 interface TrainCardContentProps {
   countdownValue: number;
@@ -86,37 +92,43 @@ export default function TrainCardContent({
         </Text>
 
         <View style={styles.timeRow}>
-          <View style={styles.timeInfo}>
-            <View style={[styles.arrowIcon, styles.departureIcon]}>
-              <MaterialCommunityIcons name="arrow-top-right" size={8} color={AppColors.secondary} />
-            </View>
-            <Text style={styles.timeCode}>{fromCode}</Text>
-            <TimeDisplay
-              time={departTime}
-              dayOffset={departDayOffset}
-              style={[styles.timeValue, pastColor]}
-              superscriptStyle={localStyles.timeSuperscript}
-              delayMinutes={departDelayMinutes}
-              delayedTime={departDelayedTime}
-              delayedDayOffset={departDelayedDayOffset}
-            />
-          </View>
+          {(() => {
+            const depColorKey = getDelayColorKey(departDelayMinutes);
+            const depBg = depColorKey ? DELAY_COLORS[depColorKey] : pastColor?.color ?? AppColors.secondary;
+            return (
+              <View style={styles.timeInfo}>
+                <View style={[styles.arrowIcon, { backgroundColor: depBg }]}>
+                  <MaterialCommunityIcons name="arrow-top-right" size={10} color={AppColors.background.tertiary} />
+                </View>
+                <Text style={styles.timeCode}>{fromCode}</Text>
+                <TimeDisplay
+                  time={departDelayMinutes && departDelayMinutes > 0 && departDelayedTime ? departDelayedTime : departTime}
+                  dayOffset={departDelayMinutes && departDelayMinutes > 0 && departDelayedDayOffset != null ? departDelayedDayOffset : departDayOffset}
+                  style={[styles.timeValue, pastColor, depColorKey && { color: DELAY_COLORS[depColorKey] }]}
+                  superscriptStyle={[localStyles.timeSuperscript, depColorKey && { color: DELAY_COLORS[depColorKey] }]}
+                />
+              </View>
+            );
+          })()}
 
-          <View style={styles.timeInfo}>
-            <View style={[styles.arrowIcon, styles.arrivalIcon]}>
-              <MaterialCommunityIcons name="arrow-bottom-left" size={8} color={AppColors.secondary} />
-            </View>
-            <Text style={styles.timeCode}>{toCode}</Text>
-            <TimeDisplay
-              time={arriveTime}
-              dayOffset={arriveDayOffset}
-              style={[styles.timeValue, pastColor]}
-              superscriptStyle={localStyles.timeSuperscript}
-              delayMinutes={arriveDelayMinutes}
-              delayedTime={arriveDelayedTime}
-              delayedDayOffset={arriveDelayedDayOffset}
-            />
-          </View>
+          {(() => {
+            const arrColorKey = getDelayColorKey(arriveDelayMinutes);
+            const arrBg = arrColorKey ? DELAY_COLORS[arrColorKey] : pastColor?.color ?? AppColors.secondary;
+            return (
+              <View style={styles.timeInfo}>
+                <View style={[styles.arrowIcon, { backgroundColor: arrBg }]}>
+                  <MaterialCommunityIcons name="arrow-bottom-left" size={10} color={AppColors.background.tertiary} />
+                </View>
+                <Text style={styles.timeCode}>{toCode}</Text>
+                <TimeDisplay
+                  time={arriveDelayMinutes && arriveDelayMinutes > 0 && arriveDelayedTime ? arriveDelayedTime : arriveTime}
+                  dayOffset={arriveDelayMinutes && arriveDelayMinutes > 0 && arriveDelayedDayOffset != null ? arriveDelayedDayOffset : arriveDayOffset}
+                  style={[styles.timeValue, pastColor, arrColorKey && { color: DELAY_COLORS[arrColorKey] }]}
+                  superscriptStyle={[localStyles.timeSuperscript, arrColorKey && { color: DELAY_COLORS[arrColorKey] }]}
+                />
+              </View>
+            );
+          })()}
         </View>
       </View>
     </View>

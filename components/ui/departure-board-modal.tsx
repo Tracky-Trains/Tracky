@@ -22,7 +22,7 @@ import type { Stop, Train } from '../../types/train';
 import { addDays, getStartOfDay, isSameDay } from '../../utils/date-helpers';
 import { useUnits } from '../../context/UnitsContext';
 import { logger } from '../../utils/logger';
-import { addDelayToTime, parseTimeToMinutes } from '../../utils/time-formatting';
+import { addDelayToTime, formatDelayShort, parseTimeToMinutes } from '../../utils/time-formatting';
 import { formatTemp, weatherApiTempUnit } from '../../utils/units';
 import { getWeatherCondition } from '../../utils/weather';
 import { SlideUpModalContext } from './slide-up-modal';
@@ -310,7 +310,7 @@ function SwipeableDepartureItem({ train, stationTime, stationId, onPress, onSave
                       style={[styles.timeText, styles.timeTextDelayed]}
                       superscriptStyle={[styles.timeSuperscript, styles.timeTextDelayed]}
                     />
-                    <Text style={styles.delayText}>Delay {train.realtime.delay}m</Text>
+                    <Text style={styles.delayText}>{formatDelayShort(train.realtime.delay)} delay</Text>
                   </>
                 );
               })()

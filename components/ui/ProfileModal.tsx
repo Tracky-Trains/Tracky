@@ -26,6 +26,7 @@ import { SlideUpModalContext } from './slide-up-modal';
 interface ProfileModalProps {
   onClose: () => void;
   onOpenSettings: () => void;
+  isActive?: boolean;
 }
 
 function buildTicketArt(header: string, rows: [string, string][]): string {
@@ -191,7 +192,7 @@ const SwipeableHistoryCard = React.memo(function SwipeableHistoryCard({
 type SortField = 'date' | 'from' | 'to' | 'route';
 type SortDirection = 'asc' | 'desc';
 
-export default function ProfileModal({ onClose, onOpenSettings }: ProfileModalProps) {
+export default function ProfileModal({ onClose, onOpenSettings, isActive }: ProfileModalProps) {
   const [history, setHistory] = useState<CompletedTrip[]>([]);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [sortField, setSortField] = useState<SortField>('date');
@@ -212,10 +213,11 @@ export default function ProfileModal({ onClose, onOpenSettings }: ProfileModalPr
   }, [history]);
 
   useEffect(() => {
+    if (isActive === false) return;
     TrainStorageService.backfillHistoryStats()
       .then(() => TrainStorageService.getTripHistory())
       .then(setHistory);
-  }, []);
+  }, [isActive]);
 
   const handleDeleteHistory = useCallback(async (trip: CompletedTrip) => {
     await TrainStorageService.deleteFromHistory(trip.tripId, trip.fromCode, trip.toCode, trip.travelDate);

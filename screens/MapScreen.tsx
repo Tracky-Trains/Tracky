@@ -103,6 +103,7 @@ function MapScreenInner() {
 
   // Use centralized modal context
   const {
+    activeModal,
     showMainContent,
     showTrainDetailContent,
     showDepartureBoardContent,
@@ -800,6 +801,7 @@ function MapScreenInner() {
           <ProfileModal
             onClose={() => goBack()}
             onOpenSettings={() => navigateToSettings()}
+            isActive={activeModal === 'profile'}
           />
         )}
       </SlideUpModal>
@@ -843,7 +845,7 @@ const loadingStyles = StyleSheet.create({
   },
   copyright: {
     position: 'absolute',
-    bottom: '25%',
+    bottom: '15%',
     color: AppColors.secondary,
     fontSize: 12,
     fontWeight: '400',

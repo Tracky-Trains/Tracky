@@ -46,7 +46,7 @@ export interface RealtimeAlert {
 const TRANSITDOCS_GTFS_RT_URL = 'https://asm-backend.transitdocs.com/gtfs/amtrak';
 
 // Cache for real-time data (15 seconds TTL for more frequent updates)
-const CACHE_TTL = 15000;
+const CACHE_TTL = 30000;
 let positionsCache: { data: Map<string, RealtimePosition>; timestamp: number } | null = null;
 let updatesCache: { data: Map<string, RealtimeUpdate[]>; timestamp: number } | null = null;
 

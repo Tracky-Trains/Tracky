@@ -300,10 +300,9 @@ export const ModalProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
 
     // Hide content of the dismissed modal to free resources
-    // Main modal stays mounted to avoid re-initialization flash (GTFS loading state)
+    // Main and profile modals stay mounted to avoid re-initialization flash
     if (type === 'trainDetail') setShowTrainDetailContent(false);
     else if (type === 'departureBoard') setShowDepartureBoardContent(false);
-    else if (type === 'profile') setShowProfileContent(false);
     else if (type === 'settings') setShowSettingsContent(false);
   }, [getModalRef]);
 

@@ -123,7 +123,7 @@ const errorStyles = StyleSheet.create({
   },
   copyright: {
     position: 'absolute',
-    bottom: '25%',
+    bottom: '15%',
     color: AppColors.secondary,
     fontSize: 12,
     fontWeight: '400',

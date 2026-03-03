@@ -7,7 +7,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppColors, CloseButtonStyle, Spacing } from '../../constants/theme';
 import { TrainIcon } from '../TrainIcon';
-import { addDelayToTime, formatTimeWithDayOffset, timeToMinutes } from '../../utils/time-formatting';
+import { addDelayToTime, formatDelayStatus, formatTimeWithDayOffset, getDelayColorKey, timeToMinutes } from '../../utils/time-formatting';
 import { RealtimeService } from '../../services/realtime';
 
 import { useTrainContext } from '../../context/TrainContext';
@@ -429,12 +429,16 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
     const now = new Date();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
     const stopMinutes = timeToMinutes(stop.time) + stop.dayOffset * 24 * 60;
-    const diffMin = Math.max(0, Math.round(stopMinutes - currentMinutes));
+    const delayData = stopDelays.get(stop.code);
+    const delayMin = delayData?.arrivalDelay ?? delayData?.departureDelay ?? 0;
+    const delayOffset = delayMin > 0 ? delayMin : 0;
+    const diffMin = Math.max(0, Math.round(stopMinutes + delayOffset - currentMinutes));
     const timeStr = diffMin >= 60
       ? `${Math.floor(diffMin / 60)}h${diffMin % 60 > 0 ? ` ${diffMin % 60}m` : ''}`
       : `${diffMin} min`;
-    return nextStopIndex === 0 ? `Departs ${stop.name} in ${timeStr}` : `${stop.name} in ${timeStr}`;
-  }, [isLiveTrain, nextStopIndex, allStops]);
+    const delayLabel = delayOffset > 0 ? ` (${delayOffset}m late)` : '';
+    return nextStopIndex === 0 ? `Departs ${stop.name} in ${timeStr}${delayLabel}` : `${stop.name} in ${timeStr}${delayLabel}`;
+  }, [isLiveTrain, nextStopIndex, allStops, stopDelays]);
 
   if (!trainData) {
     return (
@@ -530,16 +534,26 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
               {(() => {
                 const dDelay = trainData.daysAway <= 0 ? trainData.realtime?.delay : undefined;
                 const dDelayed = dDelay && dDelay > 0 ? addDelayToTime(trainData.departTime, dDelay, 0) : undefined;
+                const colorKey = getDelayColorKey(dDelay);
+                const timeColor = colorKey === 'onTime' ? AppColors.success : undefined;
                 return (
-                  <TimeDisplay
-                    time={trainData.departTime}
-                    dayOffset={0}
-                    style={styles.timeText}
-                    superscriptStyle={styles.timeSuperscript}
-                    delayMinutes={dDelay}
-                    delayedTime={dDelayed?.time}
-                    delayedDayOffset={dDelayed?.dayOffset}
-                  />
+                  <>
+                    <TimeDisplay
+                      time={trainData.departTime}
+                      dayOffset={0}
+                      style={[styles.timeText, timeColor && { color: timeColor }]}
+                      superscriptStyle={[styles.timeSuperscript, timeColor && { color: timeColor }]}
+                      delayMinutes={dDelay}
+                      delayedTime={dDelayed?.time}
+                      delayedDayOffset={dDelayed?.dayOffset}
+                      hideDelayLabel
+                    />
+                    {trainData.daysAway <= 0 && dDelay != null && (
+                      <Text style={[styles.delayStatusText, colorKey === 'delayed' ? styles.delayStatusLate : styles.delayStatusEarly]}>
+                        {formatDelayStatus(dDelay)}
+                      </Text>
+                    )}
+                  </>
                 );
               })()}
               <View style={styles.durationLineRow}>
@@ -584,16 +598,26 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
               {(() => {
                 const aDelay = trainData.daysAway <= 0 ? trainData.realtime?.arrivalDelay : undefined;
                 const aDelayed = aDelay && aDelay > 0 ? addDelayToTime(trainData.arriveTime, aDelay, trainData.arriveDayOffset || 0) : undefined;
+                const colorKey = getDelayColorKey(aDelay);
+                const timeColor = colorKey === 'onTime' ? AppColors.success : undefined;
                 return (
-                  <TimeDisplay
-                    time={trainData.arriveTime}
-                    dayOffset={trainData.arriveDayOffset || 0}
-                    style={styles.timeText}
-                    superscriptStyle={styles.timeSuperscript}
-                    delayMinutes={aDelay}
-                    delayedTime={aDelayed?.time}
-                    delayedDayOffset={aDelayed?.dayOffset}
-                  />
+                  <>
+                    <TimeDisplay
+                      time={trainData.arriveTime}
+                      dayOffset={trainData.arriveDayOffset || 0}
+                      style={[styles.timeText, timeColor && { color: timeColor }]}
+                      superscriptStyle={[styles.timeSuperscript, timeColor && { color: timeColor }]}
+                      delayMinutes={aDelay}
+                      delayedTime={aDelayed?.time}
+                      delayedDayOffset={aDelayed?.dayOffset}
+                      hideDelayLabel
+                    />
+                    {trainData.daysAway <= 0 && aDelay != null && (
+                      <Text style={[styles.delayStatusText, colorKey === 'delayed' ? styles.delayStatusLate : styles.delayStatusEarly]}>
+                        {formatDelayStatus(aDelay)}
+                      </Text>
+                    )}
+                  </>
                 );
               })()}
             </View>
@@ -748,6 +772,7 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
                               delayMinutes={stopDelayMin}
                               delayedTime={stopDelayed?.time}
                               delayedDayOffset={stopDelayed?.dayOffset}
+                              delayLayout="vertical"
                             />
                           </View>
                         </View>
@@ -1273,7 +1298,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontFamily: FONTS.family,
     color: AppColors.primary,
-    marginBottom: Spacing.sm,
+    marginBottom: 0,
   },
   timeSuperscript: {
     fontSize: 14,
@@ -1282,11 +1307,23 @@ const styles = StyleSheet.create({
     marginLeft: Spacing.xs,
     marginTop: 0,
   },
+  delayStatusText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: AppColors.success,
+    marginTop: 2,
+  },
+  delayStatusLate: {
+    color: AppColors.delayed,
+  },
+  delayStatusEarly: {
+    color: AppColors.success,
+  },
   durationLineRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: Spacing.lg,
-    marginBottom: 0,
+    marginBottom: -Spacing.sm,
     gap: Spacing.sm,
   },
   durationContentRow: {
@@ -1301,7 +1338,7 @@ const styles = StyleSheet.create({
   horizontalLine: {
     flex: 1,
     height: 1,
-    backgroundColor: AppColors.tertiary,
-    marginLeft: Spacing.md,
+    backgroundColor: AppColors.border.primary,
+    marginLeft: Spacing.sm,
   },
 });
