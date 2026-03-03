@@ -44,7 +44,7 @@ export default function TrainCardContent({
 
   return (
     <View style={localStyles.row}>
-      <View style={styles.trainLeft}>
+      <View style={[styles.trainLeft, isPast && { opacity: 0.4 }]}>
         <Text style={[styles.daysAway, pastColor]}>{countdownValue}</Text>
         <Text style={[styles.daysLabel, pastColor]}>{countdownLabel}</Text>
       </View>

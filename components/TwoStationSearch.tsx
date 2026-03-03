@@ -73,7 +73,7 @@ const calendarTheme = {
   selectedDayTextColor: '#000000',
   textDisabledColor: 'rgba(255, 255, 255, 0.2)',
   todayTextColor: AppColors.primary,
-  todayBackgroundColor: AppColors.background.tertiary,
+  todayBackgroundColor: AppColors.background.primary,
   textSectionTitleColor: AppColors.secondary,
   textDayFontWeight: 'bold' as const,
   textMonthFontWeight: 'bold' as const,
@@ -1098,8 +1098,6 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
   },
   segmentDate: {
-    borderWidth: 1,
-    borderColor: AppColors.primary,
   },
   segmentDatePlaceholder: {
     borderWidth: 1,
