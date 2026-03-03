@@ -1,25 +1,24 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   Linking,
   Platform,
-  ScrollView as RNScrollView,
   Share,
   StyleSheet,
-  Switch,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { ScrollView } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, ScrollView } from 'react-native-gesture-handler';
+import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { AppColors, BorderRadius, Spacing } from '../../constants/theme';
+import { AppColors, BorderRadius, CloseButtonStyle, Spacing } from '../../constants/theme';
 import { type DistanceUnit, type TempUnit, useUnits } from '../../context/UnitsContext';
 import {
   type DeviceCalendar,
-  type SyncResult,
   getDeviceCalendars,
   hasCalendarPermission,
   requestCalendarPermission,
@@ -30,12 +29,13 @@ import { light as hapticLight, selection as hapticSelection } from '../../utils/
 import { type LogEntry, LogLevel, logger, openReportBugEmail, openReportBadDataEmail } from '../../utils/logger';
 import { SlideUpModalContext } from './slide-up-modal';
 
+
 interface SettingsModalProps {
   onClose: () => void;
   onRefreshGTFS: () => void;
 }
 
-type SyncState = 'idle' | 'selecting' | 'syncing' | 'done';
+type SyncState = 'idle' | 'selecting' | 'syncing';
 
 const SCAN_OPTIONS = [
   { label: '30 days', value: 30 },
@@ -52,7 +52,7 @@ const TEMP_OPTIONS: { label: string; value: TempUnit }[] = [
 const DISTANCE_OPTIONS: { label: string; value: DistanceUnit; desc: string }[] = [
   { label: 'Miles', value: 'mi', desc: 'mi' },
   { label: 'Kilometers', value: 'km', desc: 'km' },
-  { label: 'Burgers', value: 'burgers', desc: '\uD83C\uDF54' },
+  { label: '🍔', value: 'burgers', desc: '🍔' },
 ];
 
 const LOG_LEVEL_COLORS: Record<LogLevel, string> = {
@@ -80,11 +80,54 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
   const [calendarsLoaded, setCalendarsLoaded] = useState(false);
   const [selectedCalendarIds, setSelectedCalendarIds] = useState<Set<string>>(new Set());
   const [scanDays, setScanDays] = useState(30);
-  const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
-  const doneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [debugLogs, setDebugLogs] = useState<LogEntry[]>([]);
   const [logFilter, setLogFilter] = useState<LogLevel | 'ALL'>('ALL');
   const [forceCrash, setForceCrash] = useState(false);
+
+  const { width: SCREEN_WIDTH } = Dimensions.get('window');
+  const slideX = useSharedValue(0); // 0 = main, 1 = subpage
+
+  const openSubpage = useCallback((page: 'calendar' | 'units' | 'about' | 'debugLog') => {
+    hapticLight();
+    setCurrentPage(page);
+    slideX.value = withTiming(1, { duration: 300, easing: Easing.out(Easing.cubic) });
+  }, []);
+
+  const resetSubpageState = useCallback(() => {
+    if (currentPage === 'calendar') setSyncState('idle');
+    setTimeout(() => setCurrentPage('main'), 300);
+  }, [currentPage]);
+
+  const closeSubpage = useCallback(() => {
+    hapticLight();
+    slideX.value = withTiming(0, { duration: 300, easing: Easing.out(Easing.cubic) });
+    resetSubpageState();
+  }, [resetSubpageState]);
+
+  const mainAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: -slideX.value * SCREEN_WIDTH * 0.3 }],
+    opacity: 1 - slideX.value * 0.3,
+  }));
+
+  const subpageAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: (1 - slideX.value) * SCREEN_WIDTH }],
+  }));
+
+  const swipeBackGesture = Gesture.Pan()
+    .activeOffsetX(20)
+    .failOffsetY([-20, 20])
+    .onUpdate((e) => {
+      const progress = Math.max(0, e.translationX) / SCREEN_WIDTH;
+      slideX.value = 1 - progress;
+    })
+    .onEnd((e) => {
+      if (e.translationX > SCREEN_WIDTH * 0.3 || e.velocityX > 500) {
+        slideX.value = withTiming(0, { duration: 250, easing: Easing.out(Easing.cubic) });
+        runOnJS(resetSubpageState)();
+      } else {
+        slideX.value = withTiming(1, { duration: 250, easing: Easing.out(Easing.cubic) });
+      }
+    });
 
   useEffect(() => {
     TrainStorageService.getCalendarSyncPrefs().then(prefs => {
@@ -104,9 +147,6 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
       setCalendarsLoaded(true);
     })();
 
-    return () => {
-      if (doneTimerRef.current) clearTimeout(doneTimerRef.current);
-    };
   }, []);
 
   useEffect(() => {
@@ -168,12 +208,15 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
     setSyncState('syncing');
     try {
       const result = await syncPastTrips(ids, scanDays);
-      setSyncResult(result);
-      setSyncState('done');
-      doneTimerRef.current = setTimeout(() => {
-        setSyncState('idle');
-        setSyncResult(null);
-      }, 3000);
+      const message = result.failReason === 'gtfs_not_loaded'
+        ? 'Schedule data not loaded yet. Please wait and try again.'
+        : result.failReason === 'no_calendar_events'
+          ? `No events found in calendar (${scanDays === -1 ? 'all time' : `last ${scanDays} days`}).`
+          : result.failReason === 'no_pattern_match'
+            ? `Found ${result.totalCalendarEvents} event${result.totalCalendarEvents !== 1 ? 's' : ''} but none matched "Train to..." pattern.`
+            : `Parsed ${result.parsed} event${result.parsed !== 1 ? 's' : ''}. Found ${result.added} trip${result.added !== 1 ? 's' : ''}${result.skipped > 0 ? ` (${result.skipped} already existed)` : ''}.`;
+      Alert.alert(result.failReason ? 'Sync Issue' : 'Sync Complete', message);
+      setSyncState('selecting');
     } catch {
       Alert.alert('Sync Error', 'Something went wrong while scanning your calendar.');
       setSyncState('selecting');
@@ -272,10 +315,7 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
         <TouchableOpacity
           style={[styles.settingsItem, styles.settingsItemLast]}
           activeOpacity={0.7}
-          onPress={() => {
-            hapticLight();
-            setCurrentPage('calendar');
-          }}
+          onPress={() => openSubpage('calendar')}
         >
           <View style={styles.itemIconContainer}>
             <Ionicons name="calendar-outline" size={22} color={AppColors.primary} />
@@ -292,10 +332,7 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
         <TouchableOpacity
           style={[styles.settingsItem, styles.settingsItemLast]}
           activeOpacity={0.7}
-          onPress={() => {
-            hapticLight();
-            setCurrentPage('units');
-          }}
+          onPress={() => openSubpage('units')}
         >
           <View style={styles.itemIconContainer}>
             <Ionicons name="speedometer-outline" size={22} color={AppColors.primary} />
@@ -327,7 +364,6 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
           <View style={styles.itemContent}>
             <Text style={styles.itemTitle}>Refresh Amtrak Schedule</Text>
           </View>
-          <Ionicons name="chevron-forward" size={20} color={AppColors.secondary} />
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.settingsItem}
@@ -343,7 +379,7 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
           <View style={styles.itemContent}>
             <Text style={styles.itemTitle}>Report a Bug</Text>
           </View>
-          <Ionicons name="chevron-forward" size={20} color={AppColors.secondary} />
+          <Ionicons name="mail-outline" size={20} color={AppColors.secondary} />
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.settingsItem, styles.settingsItemLast]}
@@ -359,7 +395,7 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
           <View style={styles.itemContent}>
             <Text style={styles.itemTitle}>Report Bad Data</Text>
           </View>
-          <Ionicons name="chevron-forward" size={20} color={AppColors.secondary} />
+          <Ionicons name="mail-outline" size={20} color={AppColors.secondary} />
         </TouchableOpacity>
       </View>
 
@@ -368,10 +404,7 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
         <TouchableOpacity
           style={[styles.settingsItem, styles.settingsItemLast]}
           activeOpacity={0.7}
-          onPress={() => {
-            hapticLight();
-            setCurrentPage('about');
-          }}
+          onPress={() => openSubpage('about')}
         >
           <View style={styles.itemIconContainer}>
             <Ionicons name="information-circle-outline" size={22} color={AppColors.primary} />
@@ -390,10 +423,7 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
             <TouchableOpacity
               style={styles.settingsItem}
               activeOpacity={0.7}
-              onPress={() => {
-                hapticLight();
-                setCurrentPage('debugLog');
-              }}
+              onPress={() => openSubpage('debugLog')}
             >
               <View style={styles.itemIconContainer}>
                 <Ionicons name="document-text-outline" size={22} color={AppColors.primary} />
@@ -478,9 +508,9 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
         </View>
       )}
       {syncState === 'selecting' && (
-        <View>
+        <>
           <View style={[styles.panelHeader, { marginTop: Spacing.lg }]}>
-            <Text style={styles.sectionHeader}>SELECT CALENDARS</Text>
+            <Text style={styles.sectionHeader}>CALENDARS</Text>
             <TouchableOpacity
               onPress={() => {
                 hapticSelection();
@@ -491,52 +521,49 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
               <Text style={styles.toggleAllText}>{allSelected ? 'Unselect All' : 'Select All'}</Text>
             </TouchableOpacity>
           </View>
-          <RNScrollView style={styles.calendarList} nestedScrollEnabled>
-            {calendars.map(cal => (
+          <View style={styles.settingsList}>
+            {calendars.map((cal, i) => (
               <TouchableOpacity
                 key={cal.id}
-                style={styles.calendarRow}
+                style={[styles.settingsItem, { paddingHorizontal: Spacing.lg }, i === calendars.length - 1 && styles.settingsItemLast]}
                 activeOpacity={0.7}
                 onPress={() => {
                   hapticSelection();
                   toggleCalendar(cal.id);
                 }}
               >
-                <View style={[styles.calendarDot, { backgroundColor: cal.color }]} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.calendarName}>{cal.title}</Text>
-                  <Text style={styles.calendarSource}>{cal.source}</Text>
+                <View style={[styles.calendarDot, { marginRight: Spacing.md }]} >
+                  <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: cal.color }} />
                 </View>
-                <Switch
-                  value={selectedCalendarIds.has(cal.id)}
-                  onValueChange={() => {
-                    hapticSelection();
-                    toggleCalendar(cal.id);
-                  }}
-                  trackColor={{ false: AppColors.border.primary, true: AppColors.primary }}
-                />
+                <View style={styles.itemContent}>
+                  <Text style={styles.itemTitle}>{cal.title}</Text>
+                  <Text style={styles.itemSubtitle}>{cal.source}</Text>
+                </View>
+                {selectedCalendarIds.has(cal.id) && <Ionicons name="checkmark" size={20} color={AppColors.primary} />}
               </TouchableOpacity>
             ))}
-          </RNScrollView>
+          </View>
           <Text style={styles.sectionHeader}>SCAN RANGE</Text>
-          <View style={styles.dropdownContainer}>
-            {SCAN_OPTIONS.map(opt => (
+          <View style={styles.settingsList}>
+            {SCAN_OPTIONS.map((opt, i) => (
               <TouchableOpacity
                 key={opt.value}
-                style={styles.dropdownOption}
+                style={[styles.settingsItem, { paddingHorizontal: Spacing.lg }, i === SCAN_OPTIONS.length - 1 && styles.settingsItemLast]}
                 onPress={() => {
                   hapticSelection();
                   setScanDays(opt.value);
                 }}
                 activeOpacity={0.7}
               >
-                <Text style={styles.dropdownOptionText}>{opt.label}</Text>
+                <View style={styles.itemContent}>
+                  <Text style={styles.itemTitle}>{opt.label}</Text>
+                </View>
                 {scanDays === opt.value && <Ionicons name="checkmark" size={20} color={AppColors.primary} />}
               </TouchableOpacity>
             ))}
           </View>
           <TouchableOpacity
-            style={styles.syncButton}
+            style={[styles.syncButton, { marginTop: Spacing.xl }]}
             activeOpacity={0.7}
             onPress={() => {
               hapticLight();
@@ -545,35 +572,12 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
           >
             <Text style={styles.syncButtonText}>Sync Now</Text>
           </TouchableOpacity>
-        </View>
+        </>
       )}
       {syncState === 'syncing' && (
         <View style={styles.syncingRow}>
           <ActivityIndicator size="small" color={AppColors.primary} />
           <Text style={styles.syncingText}>Scanning events...</Text>
-        </View>
-      )}
-      {syncState === 'done' && syncResult && (
-        <View style={styles.doneRow}>
-          <Ionicons
-            name={syncResult.failReason ? 'warning' : 'checkmark-circle'}
-            size={22}
-            color={syncResult.failReason ? '#FFA500' : AppColors.success}
-          />
-          <Text style={styles.doneText}>
-            {syncResult.failReason === 'gtfs_not_loaded'
-              ? 'Schedule data not loaded yet. Please wait and try again.'
-              : syncResult.failReason === 'no_calendar_events'
-                ? `No events found in calendar (${scanDays === -1 ? 'all time' : `last ${scanDays} days`}).`
-                : syncResult.failReason === 'no_pattern_match'
-                  ? `Found ${syncResult.totalCalendarEvents} event${syncResult.totalCalendarEvents !== 1 ? 's' : ''} but none matched "Train to..." pattern.`
-                  : <>
-                      Parsed {syncResult.parsed} event{syncResult.parsed !== 1 ? 's' : ''}. Found {syncResult.added} trip
-                      {syncResult.added !== 1 ? 's' : ''}
-                      {syncResult.skipped > 0 && ` (${syncResult.skipped} already existed)`}
-                    </>
-            }
-          </Text>
         </View>
       )}
     </>
@@ -582,38 +586,40 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
   const renderUnitsPage = () => (
     <>
       <Text style={styles.sectionHeader}>TEMPERATURE</Text>
-      <View style={styles.pillRow}>
-        {TEMP_OPTIONS.map(opt => (
+      <View style={styles.settingsList}>
+        {TEMP_OPTIONS.map((opt, i) => (
           <TouchableOpacity
             key={opt.value}
-            style={[styles.pillOption, tempUnit === opt.value && styles.pillOptionActive]}
+            style={[styles.settingsItem, { paddingHorizontal: Spacing.lg }, i === TEMP_OPTIONS.length - 1 && styles.settingsItemLast]}
             onPress={() => {
               hapticSelection();
               setTempUnit(opt.value);
             }}
             activeOpacity={0.7}
           >
-            <Text style={[styles.pillOptionText, tempUnit === opt.value && styles.pillOptionTextActive]}>
-              {opt.label}
-            </Text>
+            <View style={styles.itemContent}>
+              <Text style={styles.itemTitle}>{opt.label}</Text>
+            </View>
+            {tempUnit === opt.value && <Ionicons name="checkmark" size={20} color={AppColors.primary} />}
           </TouchableOpacity>
         ))}
       </View>
       <Text style={styles.sectionHeader}>DISTANCE</Text>
-      <View style={styles.pillRow}>
-        {DISTANCE_OPTIONS.map(opt => (
+      <View style={styles.settingsList}>
+        {DISTANCE_OPTIONS.map((opt, i) => (
           <TouchableOpacity
             key={opt.value}
-            style={[styles.pillOption, distanceUnit === opt.value && styles.pillOptionActive]}
+            style={[styles.settingsItem, { paddingHorizontal: Spacing.lg }, i === DISTANCE_OPTIONS.length - 1 && styles.settingsItemLast]}
             onPress={() => {
               hapticSelection();
               setDistanceUnit(opt.value);
             }}
             activeOpacity={0.7}
           >
-            <Text style={[styles.pillOptionText, distanceUnit === opt.value && styles.pillOptionTextActive]}>
-              {opt.label}
-            </Text>
+            <View style={styles.itemContent}>
+              <Text style={styles.itemTitle}>{opt.label}</Text>
+            </View>
+            {distanceUnit === opt.value && <Ionicons name="checkmark" size={20} color={AppColors.primary} />}
           </TouchableOpacity>
         ))}
       </View>
@@ -718,121 +724,141 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
     </>
   );
 
-  const renderHeader = () => {
-    if (currentPage === 'main') {
-      return (
-        <View style={styles.header}>
-          <Text style={styles.title}>Settings</Text>
-          <TouchableOpacity
-            onPress={() => {
-              hapticLight();
-              onClose();
-            }}
-            style={styles.closeButton}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="close" size={24} color={AppColors.primary} />
-          </TouchableOpacity>
-        </View>
-      );
-    }
-    if (currentPage === 'debugLog') {
-      return (
-        <View style={styles.subPageHeader}>
-          <TouchableOpacity
-            onPress={() => {
-              hapticLight();
-              setCurrentPage('main');
-            }}
-          >
-            <Ionicons name="chevron-back" size={28} color={AppColors.primary} />
-          </TouchableOpacity>
-          <Text style={[styles.subPageTitle, { flex: 1 }]}>Debug Log</Text>
-          <TouchableOpacity
-            onPress={() => {
-              hapticLight();
-              handleShareLogs();
-            }}
-            style={styles.logHeaderButton}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="share-outline" size={20} color={AppColors.primary} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => {
-              hapticLight();
-              handleClearLogs();
-            }}
-            style={styles.logHeaderButton}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="trash-outline" size={20} color={AppColors.error} />
-          </TouchableOpacity>
-        </View>
-      );
-    }
-    const titles: Record<string, string> = { calendar: 'Calendar Sync', units: 'Units', about: 'About This App' };
-    const onBack = () => {
-      hapticLight();
-      setCurrentPage('main');
-      if (currentPage === 'calendar') setSyncState('idle');
-    };
-    return (
-      <View style={styles.subPageHeader}>
-        <TouchableOpacity onPress={onBack}>
-          <Ionicons name="chevron-back" size={28} color={AppColors.primary} />
-        </TouchableOpacity>
-        <Text style={styles.subPageTitle}>{titles[currentPage]}</Text>
-      </View>
-    );
+  const subpageTitles: Record<string, string> = {
+    calendar: 'Calendar Sync',
+    units: 'Units',
+    about: 'About This App',
+    debugLog: 'Debug Log',
   };
 
   return (
     <View style={styles.modalContent}>
-      <View style={styles.fixedHeader}>{renderHeader()}</View>
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={{ paddingBottom: 100, paddingHorizontal: Spacing.xl }}
-        scrollEnabled={isFullscreen}
-        waitFor={panRef}
-        bounces={false}
-        nestedScrollEnabled={true}
-        onScroll={e => {
-          if (scrollOffset) scrollOffset.value = e.nativeEvent.contentOffset.y;
-        }}
-        scrollEventThrottle={16}
-      >
-        {currentPage === 'main' && renderMainPage()}
-        {currentPage === 'calendar' && renderCalendarPage()}
-        {currentPage === 'units' && renderUnitsPage()}
-        {currentPage === 'about' && renderAboutPage()}
-        {currentPage === 'debugLog' && renderDebugLogPage()}
-      </ScrollView>
+      {/* Main settings page */}
+      <Animated.View style={[styles.pageContainer, mainAnimatedStyle]}>
+        <View style={styles.fixedHeader}>
+          <View style={styles.header}>
+            <Text style={styles.title}>Settings</Text>
+            <TouchableOpacity
+              onPress={() => {
+                hapticLight();
+                onClose();
+              }}
+              style={styles.closeButton}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="close" size={24} color={AppColors.primary} />
+            </TouchableOpacity>
+          </View>
+        </View>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={{ paddingBottom: 100, paddingHorizontal: Spacing.xl }}
+          scrollEnabled={isFullscreen}
+          waitFor={panRef}
+          bounces={false}
+          nestedScrollEnabled={true}
+          onScroll={e => {
+            if (scrollOffset) scrollOffset.value = e.nativeEvent.contentOffset.y;
+          }}
+          scrollEventThrottle={16}
+        >
+          {renderMainPage()}
+        </ScrollView>
+      </Animated.View>
+
+      {/* Subpage — slides in from right */}
+      {currentPage !== 'main' && (
+        <GestureDetector gesture={swipeBackGesture}>
+        <Animated.View style={[styles.subpageContainer, subpageAnimatedStyle]}>
+          <View style={styles.fixedHeader}>
+            <View style={styles.subpageHeader}>
+              <TouchableOpacity
+                onPress={closeSubpage}
+                style={styles.backButton}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="chevron-back" size={28} color={AppColors.primary} />
+              </TouchableOpacity>
+              <Text style={styles.title}>{subpageTitles[currentPage]}</Text>
+              {currentPage === 'debugLog' && (
+                <View style={styles.headerActions}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      hapticLight();
+                      handleShareLogs();
+                    }}
+                    style={styles.logHeaderButton}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="share-outline" size={20} color={AppColors.primary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => {
+                      hapticLight();
+                      handleClearLogs();
+                    }}
+                    style={styles.logHeaderButton}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="trash-outline" size={20} color={AppColors.error} />
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          </View>
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={{ paddingBottom: 100, paddingHorizontal: Spacing.xl }}
+            scrollEnabled={isFullscreen}
+            waitFor={panRef}
+            bounces={false}
+            nestedScrollEnabled={true}
+            onScroll={e => {
+              if (scrollOffset) scrollOffset.value = e.nativeEvent.contentOffset.y;
+            }}
+            scrollEventThrottle={16}
+          >
+            {currentPage === 'calendar' && renderCalendarPage()}
+            {currentPage === 'units' && renderUnitsPage()}
+            {currentPage === 'about' && renderAboutPage()}
+            {currentPage === 'debugLog' && renderDebugLogPage()}
+          </ScrollView>
+        </Animated.View>
+        </GestureDetector>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  modalContent: { flex: 1, marginHorizontal: -Spacing.xl },
+  modalContent: { flex: 1, marginHorizontal: -Spacing.xl, minHeight: '100%', overflow: 'hidden' },
+  pageContainer: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: AppColors.background.primary,
+  },
+  subpageContainer: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: AppColors.background.primary,
+  },
   fixedHeader: {
     paddingHorizontal: Spacing.xl,
     paddingBottom: Spacing.sm,
     backgroundColor: AppColors.background.primary,
   },
   divider: { height: 1, backgroundColor: AppColors.border.primary, marginVertical: Spacing.md },
-  subPageHeader: { flexDirection: 'row', alignItems: 'center', paddingTop: Spacing.xs, gap: Spacing.sm },
-  subPageTitle: { fontSize: 34, fontWeight: 'bold', color: AppColors.primary },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: Spacing.xs },
+  subpageHeader: { flexDirection: 'row', alignItems: 'center', paddingTop: Spacing.xs },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   title: { fontSize: 34, fontWeight: 'bold', color: AppColors.primary },
   closeButton: {
+    ...CloseButtonStyle,
+  },
+  backButton: {
     width: 44,
     height: 44,
-    borderRadius: 22,
-    backgroundColor: AppColors.background.secondary,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: AppColors.border.primary,
+    marginLeft: -Spacing.sm,
   },
   scrollView: { flex: 1 },
   sectionHeader: {
@@ -871,40 +897,17 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   toggleAllText: { fontSize: 15, fontWeight: '600', color: AppColors.primary },
-  calendarList: { maxHeight: 200 },
-  calendarRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: Spacing.sm },
-  calendarDot: { width: 12, height: 12, borderRadius: 6, marginRight: Spacing.md },
-  calendarName: { fontSize: 15, color: AppColors.primary, fontWeight: '500', marginBottom: 2 },
-  calendarSource: { fontSize: 13, color: AppColors.secondary },
-  dropdownContainer: {
-    backgroundColor: AppColors.background.primary,
-    borderRadius: BorderRadius.md,
-    overflow: 'hidden',
-    marginTop: Spacing.sm,
-  },
-  dropdownOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: AppColors.border.primary,
-  },
-  dropdownOptionText: { fontSize: 17, color: AppColors.primary },
+  calendarDot: { alignItems: 'center', justifyContent: 'center' },
   syncButton: {
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: AppColors.primary,
     borderRadius: BorderRadius.md,
     paddingVertical: Spacing.md,
-    marginTop: Spacing.lg,
   },
   syncButtonText: { fontSize: 17, fontWeight: '600', color: AppColors.background.primary },
   syncingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: Spacing.md },
   syncingText: { fontSize: 15, color: AppColors.secondary, marginLeft: Spacing.md },
-  doneRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: Spacing.md },
-  doneText: { fontSize: 15, color: AppColors.primary, marginLeft: Spacing.md, flex: 1 },
   pillRow: { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.sm },
   pillOption: {
     paddingHorizontal: Spacing.lg,

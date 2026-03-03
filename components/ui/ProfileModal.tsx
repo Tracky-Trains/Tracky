@@ -13,7 +13,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { AppColors, BorderRadius, FontSizes, Spacing } from '../../constants/theme';
+import { AppColors, BorderRadius, CloseButtonStyle, FontSizes, Spacing } from '../../constants/theme';
 import { useUnits } from '../../context/UnitsContext';
 import { TrainStorageService } from '../../services/storage';
 import type { CompletedTrip } from '../../types/train';
@@ -141,7 +141,7 @@ const SwipeableHistoryCard = React.memo(function SwipeableHistoryCard({
         <View style={swipeStyles.deleteButtonWrapper}>
           <GestureDetector gesture={Gesture.Tap().onEnd(() => runOnJS(handleDeletePress)())}>
             <Animated.View style={[swipeStyles.deleteButton, deleteButtonAnimatedStyle]}>
-              <Ionicons name="trash" size={22} color="#fff" />
+              <Ionicons name="trash" size={22} color={AppColors.primary} />
             </Animated.View>
           </GestureDetector>
         </View>
@@ -413,7 +413,7 @@ export default function ProfileModal({ onClose, onOpenSettings }: ProfileModalPr
           <Ionicons name="people" size={14} color={AppColors.secondary} />
           <Text style={styles.actionPillText}>Rail Friends</Text>
         </TouchableOpacity> */}
-        <TouchableOpacity style={styles.actionPill} activeOpacity={0.6} onPress={handleSettingsPress}>
+        <TouchableOpacity style={styles.actionPill} activeOpacity={0.7} onPress={handleSettingsPress}>
           <Ionicons name="settings-sharp" size={14} color={AppColors.primary} />
           <Text style={styles.actionPillText}>Settings</Text>
         </TouchableOpacity>
@@ -425,7 +425,7 @@ export default function ProfileModal({ onClose, onOpenSettings }: ProfileModalPr
           <TouchableOpacity
             style={[styles.yearButton, selectedYear === null && styles.yearButtonActive]}
             onPress={() => handleYearPress(null)}
-            activeOpacity={0.6}
+            activeOpacity={0.7}
           >
             <Text style={[styles.yearButtonText, selectedYear === null && styles.yearButtonTextActive]}>ALL-TIME</Text>
           </TouchableOpacity>
@@ -434,7 +434,7 @@ export default function ProfileModal({ onClose, onOpenSettings }: ProfileModalPr
               key={year}
               style={[styles.yearButton, selectedYear === year && styles.yearButtonActive]}
               onPress={() => handleYearPress(year)}
-              activeOpacity={0.6}
+              activeOpacity={0.7}
             >
               <Text style={[styles.yearButtonText, selectedYear === year && styles.yearButtonTextActive]}>{year}</Text>
             </TouchableOpacity>
@@ -460,15 +460,15 @@ export default function ProfileModal({ onClose, onOpenSettings }: ProfileModalPr
         <View style={styles.passportCard}>
           <View style={styles.passportHeader}>
             <View style={styles.passportTitleRow}>
-              <MaterialCommunityIcons name="train" size={20} color="#fff" />
+              <MaterialCommunityIcons name="train" size={16} color={AppColors.primary} />
               <Text style={styles.passportTitle}>{selectedYear || 'ALL-TIME'} TRAIN PASSPORT</Text>
             </View>
             <TouchableOpacity
               onPress={handleSharePassport}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              activeOpacity={0.6}
+              activeOpacity={0.7}
             >
-              <Ionicons name="share-outline" size={22} color="#fff" />
+              <Ionicons name="share-outline" size={22} color={AppColors.primary} />
             </TouchableOpacity>
           </View>
           <Text style={styles.passportSubtitle}>🎫 PASSPORT • PASS • RAIL PASS</Text>
@@ -514,11 +514,11 @@ export default function ProfileModal({ onClose, onOpenSettings }: ProfileModalPr
 
           <TouchableOpacity
             style={styles.allStatsButton}
-            activeOpacity={0.6}
+            activeOpacity={0.7}
             onPress={() => handleComingSoon('Coming Soon', 'Detailed train stats are on the way!')}
           >
             <Text style={styles.allStatsButtonText}>All Train Stats</Text>
-            <Ionicons name="chevron-forward" size={16} color="#fff" />
+            <Ionicons name="chevron-forward" size={16} color={AppColors.primary} />
           </TouchableOpacity>
         </View>
 
@@ -530,9 +530,9 @@ export default function ProfileModal({ onClose, onOpenSettings }: ProfileModalPr
               <TouchableOpacity
                 onPress={handleShareDelays}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                activeOpacity={0.6}
+                activeOpacity={0.7}
               >
-                <Ionicons name="share-outline" size={22} color="#fff" />
+                <Ionicons name="share-outline" size={22} color={AppColors.primary} />
               </TouchableOpacity>
             </View>
             <Text style={styles.delayTitle}>hours lost from delays</Text>
@@ -541,11 +541,11 @@ export default function ProfileModal({ onClose, onOpenSettings }: ProfileModalPr
             </Text>
             <TouchableOpacity
               style={styles.delayButton}
-              activeOpacity={0.6}
+              activeOpacity={0.7}
               onPress={() => handleComingSoon('Coming Soon', 'Detailed delay stats are on the way!')}
             >
               <Text style={styles.delayButtonText}>All Delay Stats</Text>
-              <Ionicons name="chevron-forward" size={16} color="#fff" />
+              <Ionicons name="chevron-forward" size={16} color={AppColors.primary} />
             </TouchableOpacity>
           </View>
         )}
@@ -558,7 +558,7 @@ export default function ProfileModal({ onClose, onOpenSettings }: ProfileModalPr
               <TouchableOpacity
                 onPress={handleShareMostRidden}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                activeOpacity={0.6}
+                activeOpacity={0.7}
               >
                 <Ionicons name="share-outline" size={22} color={AppColors.secondary} />
               </TouchableOpacity>
@@ -574,77 +574,77 @@ export default function ProfileModal({ onClose, onOpenSettings }: ProfileModalPr
         {/* Trip History Section */}
         <Text style={styles.sectionLabel}>PAST TRIPS</Text>
 
-        {/* Filter/Sort Bar */}
-        {history.length > 0 && (
-          <View style={styles.filterBar}>
-            <TouchableOpacity
-              style={[styles.filterButton, sortField === 'date' && styles.filterButtonActive]}
-              onPress={() => handleSortPress('date')}
-              activeOpacity={0.6}
-            >
-              <Text style={[styles.filterButtonText, sortField === 'date' && styles.filterButtonTextActive]}>
-                Date {sortField === 'date' && (sortDirection === 'desc' ? '↓' : '↑')}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.filterButton, sortField === 'from' && styles.filterButtonActive]}
-              onPress={() => handleSortPress('from')}
-              activeOpacity={0.6}
-            >
-              <Text style={[styles.filterButtonText, sortField === 'from' && styles.filterButtonTextActive]}>
-                From {sortField === 'from' && (sortDirection === 'desc' ? '↓' : '↑')}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.filterButton, sortField === 'to' && styles.filterButtonActive]}
-              onPress={() => handleSortPress('to')}
-              activeOpacity={0.6}
-            >
-              <Text style={[styles.filterButtonText, sortField === 'to' && styles.filterButtonTextActive]}>
-                To {sortField === 'to' && (sortDirection === 'desc' ? '↓' : '↑')}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.filterButton, sortField === 'route' && styles.filterButtonActive]}
-              onPress={() => handleSortPress('route')}
-              activeOpacity={0.6}
-            >
-              <Text style={[styles.filterButtonText, sortField === 'route' && styles.filterButtonTextActive]}>
-                Route {sortField === 'route' && (sortDirection === 'desc' ? '↓' : '↑')}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Grouped trips with separators */}
-        {filteredAndSortedHistory.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Ionicons name="time-outline" size={36} color={AppColors.secondary} />
-            <Text style={styles.emptyText}>No past trips yet</Text>
-            <Text style={styles.emptySubtext}>Completed trips will appear here</Text>
-          </View>
-        ) : (
-          groupedTrips.map(([groupKey, trips]) => (
-            <View key={groupKey}>
-              <View style={styles.groupHeader}>
-                <Text style={styles.groupHeaderText}>{groupKey}</Text>
-                <Text style={styles.groupHeaderCount}>
-                  {trips.length} {trips.length === 1 ? 'TRIP' : 'TRIPS'}
+          {/* Filter/Sort Bar */}
+          {history.length > 0 && (
+            <View style={styles.filterBar}>
+              <TouchableOpacity
+                style={[styles.filterButton, sortField === 'date' && styles.filterButtonActive]}
+                onPress={() => handleSortPress('date')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.filterButtonText, sortField === 'date' && styles.filterButtonTextActive]}>
+                  Date {sortField === 'date' && (sortDirection === 'desc' ? '↓' : '↑')}
                 </Text>
-              </View>
-              {trips.map((trip, index) => (
-                <SwipeableHistoryCard
-                  key={`${trip.tripId}-${trip.fromCode}-${index}`}
-                  trip={trip}
-                  onDelete={() => handleDeleteHistory(trip)}
-                />
-              ))}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.filterButton, sortField === 'from' && styles.filterButtonActive]}
+                onPress={() => handleSortPress('from')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.filterButtonText, sortField === 'from' && styles.filterButtonTextActive]}>
+                  From {sortField === 'from' && (sortDirection === 'desc' ? '↓' : '↑')}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.filterButton, sortField === 'to' && styles.filterButtonActive]}
+                onPress={() => handleSortPress('to')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.filterButtonText, sortField === 'to' && styles.filterButtonTextActive]}>
+                  To {sortField === 'to' && (sortDirection === 'desc' ? '↓' : '↑')}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.filterButton, sortField === 'route' && styles.filterButtonActive]}
+                onPress={() => handleSortPress('route')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.filterButtonText, sortField === 'route' && styles.filterButtonTextActive]}>
+                  Route {sortField === 'route' && (sortDirection === 'desc' ? '↓' : '↑')}
+                </Text>
+              </TouchableOpacity>
             </View>
-          ))
-        )}
+          )}
+
+          {/* Grouped trips with separators */}
+          {filteredAndSortedHistory.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="time-outline" size={36} color={AppColors.secondary} />
+              <Text style={styles.emptyText}>No past trips yet</Text>
+              <Text style={styles.emptySubtext}>Completed trips will appear here</Text>
+            </View>
+          ) : (
+            groupedTrips.map(([groupKey, trips]) => (
+              <View key={groupKey}>
+                <View style={styles.groupHeader}>
+                  <Text style={styles.groupHeaderText}>{groupKey}</Text>
+                  <Text style={styles.groupHeaderCount}>
+                    {trips.length} {trips.length === 1 ? 'TRIP' : 'TRIPS'}
+                  </Text>
+                </View>
+                {trips.map((trip, index) => (
+                  <SwipeableHistoryCard
+                    key={`${trip.tripId}-${trip.fromCode}-${index}`}
+                    trip={trip}
+                    onDelete={() => handleDeleteHistory(trip)}
+                  />
+                ))}
+              </View>
+            ))
+          )}
       </ScrollView>
     </View>
   );
@@ -719,14 +719,7 @@ const styles = StyleSheet.create({
     color: AppColors.secondary,
   },
   closeButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: AppColors.background.secondary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: AppColors.border.primary,
+    ...CloseButtonStyle,
   },
   actionPillsContainer: {
     flexDirection: 'row',
@@ -768,7 +761,7 @@ const styles = StyleSheet.create({
     color: AppColors.secondary,
   },
   yearButtonTextActive: {
-    color: '#fff',
+    color: AppColors.primary,
   },
   scrollContent: {
     paddingBottom: Spacing.xxl,
@@ -798,7 +791,7 @@ const styles = StyleSheet.create({
   passportTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#fff',
+    color: AppColors.primary,
     letterSpacing: 0.5,
   },
   passportSubtitle: {
@@ -823,13 +816,13 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   passportStatValue: {
-    fontSize: 32,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#fff',
+    color: AppColors.primary,
   },
   passportStatSubtext: {
     fontSize: 13,
-    color: '#fff',
+    color: AppColors.primary,
     marginTop: 2,
   },
   passportStatsRow: {
@@ -841,9 +834,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   passportStatValueSmall: {
-    fontSize: 22,
+    fontSize: 16,
     fontWeight: 'bold',
-    color: '#fff',
+    color: AppColors.primary,
   },
   allStatsButton: {
     flexDirection: 'row',
@@ -856,7 +849,7 @@ const styles = StyleSheet.create({
   allStatsButtonText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#fff',
+    color: AppColors.primary,
   },
   delayCard: {
     backgroundColor: '#B71C1C',
@@ -878,13 +871,13 @@ const styles = StyleSheet.create({
   delayBigNumber: {
     fontSize: 64,
     fontWeight: 'bold',
-    color: '#fff',
+    color: AppColors.primary,
     lineHeight: 64,
   },
   delayTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#fff',
+    color: AppColors.primary,
     marginBottom: Spacing.sm,
   },
   delaySubtext: {
@@ -903,7 +896,7 @@ const styles = StyleSheet.create({
   delayButtonText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#fff',
+    color: AppColors.primary,
   },
   mostRiddenCard: {
     backgroundColor: AppColors.background.secondary,

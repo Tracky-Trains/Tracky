@@ -86,10 +86,10 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   delayedTime: {
-    color: '#F59E0B', // Amber/orange color for delayed time
+    color: AppColors.delayed,
   },
   delayedSuperscript: {
-    color: '#F59E0B',
+    color: AppColors.delayed,
   },
   originalTimeContainer: {
     flexDirection: 'row',

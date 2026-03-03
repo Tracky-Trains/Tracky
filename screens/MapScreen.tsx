@@ -90,7 +90,7 @@ function LoadingOverlay({ visible }: { visible: boolean }) {
 
   return (
     <Animated.View style={[loadingStyles.overlay, { opacity }]} pointerEvents={visible ? 'auto' : 'none'}>
-      <Ionicons name="train" size={64} color={AppColors.secondary} style={loadingStyles.icon} />
+      <Ionicons name="train" size={128} color="rgba(255, 255, 255, 0.25)" style={loadingStyles.icon} />
       <Text style={loadingStyles.copyright}>Tracky - Made with ❤ by Jason</Text>
     </Animated.View>
   );
@@ -802,7 +802,7 @@ function MapScreenInner() {
       {/* Settings modal - always mounted, starts hidden, content conditional */}
       <SlideUpModal
         ref={settingsModalRef}
-        minSnapPercent={0.50}
+        minSnapPercent={0.95}
         initialSnap={getInitialSnap('settings')}
         startHidden
         onDismiss={() => handleModalDismissed('settings')}

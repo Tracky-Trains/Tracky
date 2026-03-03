@@ -35,6 +35,7 @@ export const AppColors = {
   accentBlue: '#FFFFFF',
   success: '#10B981',
   error: '#EF4444',
+  delayed: '#EF4444',
   shadow: '#000',
   background: {
     primary: '#18181B',
@@ -81,6 +82,17 @@ export const BorderRadius = {
   md: 12,
   lg: 16,
   xl: 32,
+};
+
+export const CloseButtonStyle = {
+  width: 44,
+  height: 44,
+  borderRadius: 22,
+  backgroundColor: AppColors.background.secondary,
+  alignItems: 'center' as const,
+  justifyContent: 'center' as const,
+  borderWidth: 1,
+  borderColor: AppColors.border.primary,
 };
 
 export const Fonts = Platform.select({

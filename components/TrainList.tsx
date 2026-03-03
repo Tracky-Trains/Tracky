@@ -199,7 +199,7 @@ function SwipeableTrainCard({ train, onPress, onDelete, isFirst, contentOpacity 
         <View style={swipeStyles.deleteButtonWrapper}>
           <GestureDetector gesture={Gesture.Tap().onEnd(() => runOnJS(handleDeletePress)())}>
             <Animated.View style={[swipeStyles.deleteButton, deleteButtonAnimatedStyle]}>
-              <Ionicons name="trash" size={22} color="#fff" />
+              <Ionicons name="trash" size={22} color={AppColors.primary} />
             </Animated.View>
           </GestureDetector>
         </View>
@@ -323,7 +323,7 @@ const swipeStyles = StyleSheet.create({
     flexDirection: 'row',
   },
   timeSuperscript: {
-    fontSize: 8,
+    fontSize: 10,
     fontWeight: '600',
     color: COLORS.secondary,
     marginLeft: 2,

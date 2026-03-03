@@ -15,7 +15,7 @@ import { Gesture, GestureDetector, ScrollView } from 'react-native-gesture-handl
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { AppColors, BorderRadius, Spacing } from '../../constants/theme';
+import { AppColors, BorderRadius, CloseButtonStyle, Spacing } from '../../constants/theme';
 import { TrainAPIService } from '../../services/api';
 import type { Stop, Train } from '../../types/train';
 import { addDays, getStartOfDay, isSameDay } from '../../utils/date-helpers';
@@ -288,7 +288,7 @@ function SwipeableDepartureItem({ train, stationTime, stationId, onPress, onSave
         <View style={swipeStyles.saveButtonWrapper}>
           <GestureDetector gesture={Gesture.Tap().onEnd(() => runOnJS(handleSavePress)())}>
             <Animated.View style={swipeStyles.saveButton}>
-              <Ionicons name="bookmark" size={20} color="#fff" />
+              <Ionicons name="bookmark" size={20} color={AppColors.primary} />
             </Animated.View>
           </GestureDetector>
         </View>
@@ -836,23 +836,11 @@ const styles = StyleSheet.create({
     color: AppColors.primary,
   },
   closeButton: {
+    ...CloseButtonStyle,
     position: 'absolute',
     zIndex: 20,
     right: Spacing.xl,
     top: -Spacing.sm,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: AppColors.background.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: AppColors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 5,
-    borderWidth: 1,
-    borderColor: AppColors.border.primary,
   },
   dateSelectorRow: {
     flexDirection: 'row',

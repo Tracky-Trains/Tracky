@@ -1,5 +1,6 @@
 import tzlookup from '@photostructure/tz-lookup';
 import type { Stop } from '../types/train';
+import { logger } from './logger';
 
 /**
  * Derive IANA timezone string from geographic coordinates.
@@ -7,8 +8,11 @@ import type { Stop } from '../types/train';
  */
 export function getTimezoneForCoordinates(lat: number, lon: number): string | null {
   try {
-    return tzlookup(lat, lon);
-  } catch {
+    const tz = tzlookup(lat, lon);
+    logger.debug('Timezone: coordinate lookup', { lat, lon, tz });
+    return tz;
+  } catch (e) {
+    logger.warn('Timezone: coordinate lookup failed', { lat, lon, error: String(e) });
     return null;
   }
 }
@@ -18,6 +22,10 @@ export function getTimezoneForCoordinates(lat: number, lon: number): string | nu
  * fall back to a coordinate-based lookup.
  */
 export function getTimezoneForStop(stop: Stop): string | null {
-  if (stop.stop_timezone) return stop.stop_timezone;
+  if (stop.stop_timezone) {
+    logger.debug('Timezone: using GTFS stop_timezone', { stop_id: stop.stop_id, stop_timezone: stop.stop_timezone });
+    return stop.stop_timezone;
+  }
+  logger.debug('Timezone: stop_timezone empty, falling back to coordinates', { stop_id: stop.stop_id, lat: stop.stop_lat, lon: stop.stop_lon });
   return getTimezoneForCoordinates(stop.stop_lat, stop.stop_lon);
 }
