@@ -16,11 +16,20 @@ export function isAcelaName(name?: string | null): boolean {
   return !!name && name.toLowerCase().includes('acela');
 }
 
+/** Returns true when the service is Amtrak Connecting Thruway (bus). */
+export function isThruwayName(name?: string | null): boolean {
+  return !!name && name.toLowerCase().includes('amtrak connecting thruway');
+}
+
 /**
- * Renders the correct train icon based on the train/route name.
- * Acela uses Ionicons (high-speed icon), everything else uses FontAwesome6.
+ * Renders the correct transport icon based on the train/route name.
+ * Acela uses Ionicons bullet-train icon, thruway uses bus icon,
+ * everything else uses FontAwesome6 train.
  */
 export function TrainIcon({ name, size = 16, color = AppColors.primary, style }: TrainIconProps) {
+  if (isThruwayName(name)) {
+    return <Ionicons name="bus" size={size} color={color} style={style} />;
+  }
   if (isAcelaName(name)) {
     // Ionicons "train" renders slightly larger, so we keep the caller's size as-is
     return <Ionicons name="train" size={size} color={color} style={style} />;

@@ -8,6 +8,7 @@ import {
   Platform,
   Share,
   StyleSheet,
+  Switch,
   Text,
   TouchableOpacity,
   View,
@@ -24,7 +25,10 @@ import {
   requestCalendarPermission,
   syncPastTrips,
 } from '../../services/calendar-sync';
-import { TrainStorageService } from '../../services/storage';
+import { requestPermissions, getPermissionStatus } from '../../services/notifications';
+import { type NotificationPrefs, DEFAULT_NOTIFICATION_PREFS, TrainStorageService } from '../../services/storage';
+import { TrainActivityManager } from '../../services/train-activity-manager';
+import { useTrainContext } from '../../context/TrainContext';
 import { light as hapticLight, selection as hapticSelection } from '../../utils/haptics';
 import { type LogEntry, LogLevel, logger, openReportBadDataEmail, openReportBugEmail } from '../../utils/logger';
 import { PlaceholderBlurb } from '../PlaceholderBlurb';
@@ -75,7 +79,7 @@ function formatLogDate(iso: string): string {
 export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalProps) {
   const { isFullscreen, scrollOffset, panRef } = useContext(SlideUpModalContext);
   const { tempUnit, distanceUnit, setTempUnit, setDistanceUnit } = useUnits();
-  const [currentPage, setCurrentPage] = useState<'main' | 'calendar' | 'units' | 'about' | 'dataProviders' | 'debugLog'>('main');
+  const [currentPage, setCurrentPage] = useState<'main' | 'calendar' | 'units' | 'about' | 'dataProviders' | 'debugLog' | 'notifications'>('main');
   const [syncState, setSyncState] = useState<SyncState>('idle');
   const [calendars, setCalendars] = useState<DeviceCalendar[]>([]);
   const [calendarsLoaded, setCalendarsLoaded] = useState(false);
@@ -85,11 +89,13 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
   const [debugLogs, setDebugLogs] = useState<LogEntry[]>([]);
   const [logFilter, setLogFilter] = useState<LogLevel | 'ALL'>('ALL');
   const [forceCrash, setForceCrash] = useState(false);
+  const [notifPrefs, setNotifPrefs] = useState<NotificationPrefs>(DEFAULT_NOTIFICATION_PREFS);
+  const { savedTrains } = useTrainContext();
 
   const { width: SCREEN_WIDTH } = Dimensions.get('window');
   const slideX = useSharedValue(0); // 0 = main, 1 = subpage
 
-  const openSubpage = useCallback((page: 'calendar' | 'units' | 'about' | 'dataProviders' | 'debugLog') => {
+  const openSubpage = useCallback((page: 'calendar' | 'units' | 'about' | 'dataProviders' | 'debugLog' | 'notifications') => {
     hapticLight();
     setCurrentPage(page);
     slideX.value = withTiming(1, { duration: 300, easing: Easing.out(Easing.cubic) });
@@ -150,6 +156,7 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
       setCalendarsLoaded(true);
     })();
 
+    TrainStorageService.getNotificationPrefs().then(setNotifPrefs);
   }, []);
 
   useEffect(() => {
@@ -341,6 +348,32 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
     await Share.share({ message: exported, title: 'Tracky Debug Logs' });
   }, []);
 
+  const handleNotifToggle = useCallback(async (key: keyof NotificationPrefs, value: boolean) => {
+    // On first enable, request permission
+    if (value) {
+      const status = await getPermissionStatus();
+      if (status === 'denied') {
+        Alert.alert(
+          'Notifications Disabled',
+          'Enable notifications in your device settings to use this feature.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          ]
+        );
+        return;
+      }
+      if (status === 'undetermined') {
+        const granted = await requestPermissions();
+        if (!granted) return;
+      }
+    }
+    const updated = { ...notifPrefs, [key]: value };
+    setNotifPrefs(updated);
+    hapticSelection();
+    TrainActivityManager.onPrefsChanged(updated, savedTrains).catch(() => {});
+  }, [notifPrefs, savedTrains]);
+
   const filteredLogs = logFilter === 'ALL' ? debugLogs : debugLogs.filter(l => l.level === logFilter);
 
   if (forceCrash) {
@@ -361,6 +394,24 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
           </View>
           <View style={styles.itemContent}>
             <Text style={styles.itemTitle}>Calendar Sync</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={AppColors.secondary} />
+        </TouchableOpacity>
+      </View>
+
+      <Text style={styles.sectionHeader}>NOTIFICATIONS</Text>
+      <View style={styles.settingsList}>
+        <TouchableOpacity
+          style={[styles.settingsItem, styles.settingsItemLast]}
+          activeOpacity={0.7}
+          onPress={() => openSubpage('notifications')}
+        >
+          <View style={styles.itemIconContainer}>
+            <Ionicons name="notifications-outline" size={22} color={AppColors.primary} />
+          </View>
+          <View style={styles.itemContent}>
+            <Text style={styles.itemTitle}>Notifications</Text>
+            <Text style={styles.itemSubtitle}>Reminders, alerts, Live Activities</Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color={AppColors.secondary} />
         </TouchableOpacity>
@@ -561,7 +612,7 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
       )}
       {syncState === 'selecting' && (
         <>
-          <View style={[styles.panelHeader, { marginTop: Spacing.lg }]}>
+          <View style={styles.panelHeader}>
             <Text style={styles.sectionHeader}>CALENDARS</Text>
             <TouchableOpacity
               onPress={() => {
@@ -703,7 +754,7 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
 
   const renderAboutPage = () => (
     <>
-      <View style={{ marginTop: Spacing.lg }}>
+      <View>
         <Text style={styles.sectionHeader}>ABOUT</Text>
         <Text style={styles.aboutText}>
           A beautiful train-tracking companion for Amtrak travelers, heavily inspired by Flighty.
@@ -891,12 +942,103 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
     </>
   );
 
+  const renderNotificationsPage = () => (
+    <>
+      <Text style={styles.sectionHeader}>BEFORE YOUR TRIP</Text>
+      <View style={styles.settingsList}>
+        <View style={styles.settingsItem}>
+          <View style={styles.itemIconContainer}>
+            <Ionicons name="sunny-outline" size={22} color={AppColors.primary} />
+          </View>
+          <View style={styles.itemContent}>
+            <Text style={styles.itemTitle}>Morning Status Alerts</Text>
+            <Text style={styles.itemSubtitle}>Weather & on-time status at 7 AM</Text>
+          </View>
+          <Switch
+            value={notifPrefs.morningAlerts}
+            onValueChange={v => handleNotifToggle('morningAlerts', v)}
+            trackColor={{ false: AppColors.border.primary, true: AppColors.accent }}
+          />
+        </View>
+        <View style={[styles.settingsItem, styles.settingsItemLast]}>
+          <View style={styles.itemIconContainer}>
+            <Ionicons name="time-outline" size={22} color={AppColors.primary} />
+          </View>
+          <View style={styles.itemContent}>
+            <Text style={styles.itemTitle}>Departure Reminders</Text>
+            <Text style={styles.itemSubtitle}>Notify 2 hours before departure</Text>
+          </View>
+          <Switch
+            value={notifPrefs.departureReminders}
+            onValueChange={v => handleNotifToggle('departureReminders', v)}
+            trackColor={{ false: AppColors.border.primary, true: AppColors.accent }}
+          />
+        </View>
+      </View>
+
+      <Text style={styles.sectionHeader}>DURING YOUR TRIP</Text>
+      <View style={styles.settingsList}>
+        <View style={styles.settingsItem}>
+          <View style={styles.itemIconContainer}>
+            <Ionicons name="warning-outline" size={22} color={AppColors.primary} />
+          </View>
+          <View style={styles.itemContent}>
+            <Text style={styles.itemTitle}>Delay Alerts</Text>
+            <Text style={styles.itemSubtitle}>Notify when delays change significantly</Text>
+          </View>
+          <Switch
+            value={notifPrefs.delayAlerts}
+            onValueChange={v => handleNotifToggle('delayAlerts', v)}
+            trackColor={{ false: AppColors.border.primary, true: AppColors.accent }}
+          />
+        </View>
+        <View style={[styles.settingsItem, styles.settingsItemLast]}>
+          <View style={styles.itemIconContainer}>
+            <Ionicons name="flag-outline" size={22} color={AppColors.primary} />
+          </View>
+          <View style={styles.itemContent}>
+            <Text style={styles.itemTitle}>Arrival Alerts</Text>
+            <Text style={styles.itemSubtitle}>Weather & visit stats on arrival</Text>
+          </View>
+          <Switch
+            value={notifPrefs.arrivalAlerts}
+            onValueChange={v => handleNotifToggle('arrivalAlerts', v)}
+            trackColor={{ false: AppColors.border.primary, true: AppColors.accent }}
+          />
+        </View>
+      </View>
+
+      {Platform.OS === 'ios' && (
+        <>
+          <Text style={styles.sectionHeader}>LIVE TRACKING</Text>
+          <View style={styles.settingsList}>
+            <View style={[styles.settingsItem, styles.settingsItemLast]}>
+              <View style={styles.itemIconContainer}>
+                <Ionicons name="phone-portrait-outline" size={22} color={AppColors.primary} />
+              </View>
+              <View style={styles.itemContent}>
+                <Text style={styles.itemTitle}>Live Activities</Text>
+                <Text style={styles.itemSubtitle}>Show train on Lock Screen & Dynamic Island</Text>
+              </View>
+              <Switch
+                value={notifPrefs.liveActivities}
+                onValueChange={v => handleNotifToggle('liveActivities', v)}
+                trackColor={{ false: AppColors.border.primary, true: AppColors.accent }}
+              />
+            </View>
+          </View>
+        </>
+      )}
+    </>
+  );
+
   const subpageTitles: Record<string, string> = {
     calendar: 'Calendar Sync',
     units: 'Units',
     about: 'About This App',
     dataProviders: 'Data Providers',
     debugLog: 'Debug Log',
+    notifications: 'Notifications',
   };
 
   return (
@@ -991,6 +1133,7 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
             {currentPage === 'about' && renderAboutPage()}
             {currentPage === 'dataProviders' && renderDataProvidersPage()}
             {currentPage === 'debugLog' && renderDebugLogPage()}
+            {currentPage === 'notifications' && renderNotificationsPage()}
           </ScrollView>
         </Animated.View>
         </GestureDetector>

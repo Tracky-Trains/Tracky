@@ -1,10 +1,10 @@
 import React from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
-import FontAwesome6 from 'react-native-vector-icons/FontAwesome6';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { COLORS, styles } from '../screens/styles';
 import { selection as hapticSelection } from '../utils/haptics';
+import { TrainIcon } from './TrainIcon';
 
 export interface FrequentlyUsedItemProps {
   id: string;
@@ -35,12 +35,7 @@ export function FrequentlyUsedList({
           accessibilityHint={`Select ${item.type === 'train' ? 'train route' : 'station'} ${item.name}`}
         >
           <View style={styles.frequentlyUsedIcon}>
-            {item.type === 'train' &&
-              (item.name.toLowerCase().includes('acela') ? (
-                <Ionicons name="train" size={24} color={COLORS.primary} />
-              ) : (
-                <FontAwesome6 name="train" size={20} color={COLORS.primary} />
-              ))}
+            {item.type === 'train' && <TrainIcon name={item.name} size={24} color={COLORS.primary} />}
             {item.type === 'station' && <Ionicons name="location" size={24} color={COLORS.primary} />}
             {item.type === 'route' && <MaterialCommunityIcons name="train-track" size={24} color={COLORS.primary} />}
           </View>

@@ -516,11 +516,7 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
             <View style={styles.expandableSection}>
               <View style={styles.statusRow}>
                 {isLiveTrain ? (
-                  trainData?.routeName?.toLowerCase().includes('acela') ? (
-                    <Ionicons name="train" size={20} color={AppColors.primary} style={{ marginRight: Spacing.sm }} />
-                  ) : (
-                    <FontAwesome6 name="train" size={18} color={AppColors.primary} style={{ marginRight: Spacing.sm }} />
-                  )
+                  <TrainIcon name={trainData?.routeName} size={20} color={AppColors.primary} style={{ marginRight: Spacing.sm }} />
                 ) : (
                   <Ionicons name="time-outline" size={20} color={AppColors.primary} style={{ marginRight: Spacing.sm }} />
                 )}
@@ -716,11 +712,7 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
             >
               <View style={styles.infoCardRow}>
                 <View style={styles.infoCardIcon}>
-                  {trainData?.routeName?.toLowerCase().includes('acela') ? (
-                    <Ionicons name="train" size={24} color={AppColors.primary} />
-                  ) : (
-                    <FontAwesome6 name="train" size={20} color={AppColors.primary} />
-                  )}
+                  <TrainIcon name={trainData?.routeName} size={24} color={AppColors.primary} />
                 </View>
                 <View style={styles.infoCardContent}>
                   <Text style={styles.infoCardTitle}>Where's My Train?</Text>
@@ -757,11 +749,7 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
                           {!isOrigin && !isPast && <View style={styles.timelineConnectorGap} />}
                           {isCurrent && !isOrigin && (
                             <View style={styles.timelineTrainPosition}>
-                              {trainData?.routeName?.toLowerCase().includes('acela') ? (
-                                <Ionicons name="train" size={14} color={AppColors.primary} />
-                              ) : (
-                                <FontAwesome6 name="train" size={12} color={AppColors.primary} />
-                              )}
+                              <TrainIcon name={trainData?.routeName} size={14} color={AppColors.primary} />
                             </View>
                           )}
                           {!isDest && isPast && <View style={[styles.timelineConnectorBottom, styles.timelineConnectorPast]} />}
