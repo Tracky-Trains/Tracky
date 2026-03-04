@@ -12,6 +12,7 @@ import MapSettingsPill, { MapType, RouteMode, StationMode, TrainMode } from '../
 import DepartureBoardModal from '../components/ui/departure-board-modal';
 import ProfileModal from '../components/ui/ProfileModal';
 import { RefreshBubble } from '../components/ui/RefreshBubble';
+import { TrainSpeedPill } from '../components/ui/TrainSpeedPill';
 import SettingsModal from '../components/ui/SettingsModal';
 import SlideUpModal from '../components/ui/slide-up-modal';
 import TrainDetailModal from '../components/ui/train-detail-modal';
@@ -145,6 +146,17 @@ function MapScreenInner() {
 
   // Fetch all live trains from GTFS-RT (only when trainMode is 'all')
   const { liveTrains } = useLiveTrains(15000, trainMode === 'all');
+
+  // Find live speed/bearing for the selected train
+  const selectedLiveData = useMemo(() => {
+    if (!selectedTrain || !showTrainDetailContent) return null;
+    const match = liveTrains.find(
+      lt =>
+        (selectedTrain.tripId && lt.tripId === selectedTrain.tripId) ||
+        lt.trainNumber === selectedTrain.trainNumber
+    );
+    return match?.position ?? null;
+  }, [selectedTrain, liveTrains, showTrainDetailContent]);
 
   // Memoize clustered trains to avoid expensive reclustering on every render
   const clusteredLiveTrains = useMemo(() => {
@@ -714,6 +726,11 @@ function MapScreenInner() {
       </MapView>
 
       <RefreshBubble />
+      <TrainSpeedPill
+        speed={selectedLiveData?.speed}
+        bearing={selectedLiveData?.bearing}
+        visible={!!selectedLiveData}
+      />
 
       <MapSettingsPill
         top={insets.top + 16}
