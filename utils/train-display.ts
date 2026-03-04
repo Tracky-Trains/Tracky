@@ -34,13 +34,6 @@ export function getCountdownForTrain(train: Train): {
 }
 
 /**
- * Calculate number of nights for a journey based on day offsets.
- */
-export function calculateNights(departDayOffset: number, arriveDayOffset: number): number {
-  return Math.max(0, (arriveDayOffset || 0) - (departDayOffset || 0));
-}
-
-/**
  * Pluralize a word based on count.
  */
 export function pluralize(count: number, singular: string, plural?: string): string {
