@@ -3,6 +3,9 @@ import { DEFAULT_NOTIFICATION_PREFS, TrainStorageService } from './storage';
 import { BackgroundTaskService } from './background-tasks';
 import * as LiveActivityService from './live-activity';
 import * as NotificationService from './notifications';
+import { selectNextTrain, buildTravelStats } from './widget-data';
+import { nextTrainWidget } from '../widgets/NextTrainWidget';
+import { travelStatsWidget } from '../widgets/TravelStatsWidget';
 import type { Train } from '../types/train';
 import { parseTimeToDate } from '../utils/time-formatting';
 import { logger } from '../utils/logger';
@@ -28,10 +31,34 @@ function hasAnyFeatureEnabled(prefs: NotificationPrefs): boolean {
   );
 }
 
+function refreshNextTrainWidget(trains: Train[]): void {
+  try {
+    const data = selectNextTrain(trains);
+    nextTrainWidget.updateSnapshot(data);
+  } catch (e) {
+    logger.error('[Widget] Failed to refresh NextTrain widget:', e);
+  }
+}
+
+function refreshStatsWidget(): void {
+  TrainStorageService.getTripHistory()
+    .then(history => {
+      const data = buildTravelStats(history);
+      travelStatsWidget.updateSnapshot(data);
+    })
+    .catch(e => {
+      logger.error('[Widget] Failed to refresh TravelStats widget:', e);
+    });
+}
+
 function isArrived(train: Train): boolean {
   if (train.daysAway !== 0) return false;
   const now = new Date();
   const arriveDate = parseTimeToDate(train.arriveTime, now);
+  // Account for multi-day journeys (e.g., departs today, arrives tomorrow)
+  if (train.arriveDayOffset) {
+    arriveDate.setDate(arriveDate.getDate() + train.arriveDayOffset);
+  }
   const delay = train.realtime?.arrivalDelay ?? train.realtime?.delay ?? 0;
   const adjustedArrival = new Date(arriveDate.getTime() + delay * 60 * 1000);
   return now >= adjustedArrival;
@@ -40,6 +67,11 @@ function isArrived(train: Train): boolean {
 export const TrainActivityManager = {
   async onTrainSaved(train: Train): Promise<void> {
     const prefs = await loadPrefs();
+
+    // Refresh widget regardless of notification prefs
+    const allTrains = await TrainStorageService.getSavedTrains();
+    refreshNextTrainWidget(allTrains);
+
     if (!hasAnyFeatureEnabled(prefs)) return;
 
     if (prefs.morningAlerts || prefs.departureReminders) {
@@ -55,15 +87,24 @@ export const TrainActivityManager = {
     await NotificationService.cancelRemindersForTrain(tripId, fromCode, toCode);
     await LiveActivityService.endForTrain(tripId, fromCode, toCode);
     sentArrivalAlerts.delete(`${tripId}-${fromCode}-${toCode}`);
+
+    const remaining = await TrainStorageService.getSavedTrains();
+    refreshNextTrainWidget(remaining);
   },
 
   async onTrainArchived(train: Train): Promise<void> {
     await NotificationService.cancelRemindersForTrain(train.tripId || '', train.fromCode, train.toCode);
     await LiveActivityService.endForTrain(train.tripId || '', train.fromCode, train.toCode);
     sentArrivalAlerts.delete(trainKey(train));
+
+    const remaining = await TrainStorageService.getSavedTrains();
+    refreshNextTrainWidget(remaining);
+    refreshStatsWidget();
   },
 
   async onRealtimeUpdate(oldTrains: Train[], newTrains: Train[]): Promise<void> {
+    refreshNextTrainWidget(newTrains);
+
     const prefs = cachedPrefs;
     if (!hasAnyFeatureEnabled(prefs)) return;
 
@@ -106,6 +147,10 @@ export const TrainActivityManager = {
   },
 
   async onAppStartup(trains: Train[]): Promise<void> {
+    // Refresh widgets on every startup
+    refreshNextTrainWidget(trains);
+    refreshStatsWidget();
+
     const prefs = await loadPrefs();
     if (!hasAnyFeatureEnabled(prefs)) return;
 
@@ -129,6 +174,7 @@ export const TrainActivityManager = {
   async onPrefsChanged(prefs: NotificationPrefs, trains: Train[]): Promise<void> {
     cachedPrefs = prefs;
     await TrainStorageService.saveNotificationPrefs(prefs);
+    refreshNextTrainWidget(trains);
 
     if (!hasAnyFeatureEnabled(prefs)) {
       await NotificationService.cancelAllReminders();

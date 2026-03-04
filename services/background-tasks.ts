@@ -4,6 +4,10 @@ import { TrainAPIService } from './api';
 import * as LiveActivityService from './live-activity';
 import * as NotificationService from './notifications';
 import { TrainStorageService } from './storage';
+import { selectNextTrain, buildTravelStats } from './widget-data';
+import { nextTrainWidget } from '../widgets/NextTrainWidget';
+import { travelStatsWidget } from '../widgets/TravelStatsWidget';
+import { parseTimeToDate } from '../utils/time-formatting';
 import { logger } from '../utils/logger';
 
 const BACKGROUND_TASK_NAME = 'TRACKY_TRAIN_UPDATE';
@@ -46,14 +50,11 @@ TaskManager.defineTask(BACKGROUND_TASK_NAME, async () => {
       // Arrival detection (simple: arrival time + delay has passed)
       if (prefs.arrivalAlerts && updated.arriveTime) {
         const now = new Date();
-        const arriveDate = new Date(now);
-        const [time, meridian] = updated.arriveTime.split(' ');
-        const [hStr, mStr] = time.split(':');
-        let h = parseInt(hStr, 10);
-        const m = parseInt(mStr, 10);
-        if (meridian?.toUpperCase() === 'PM' && h !== 12) h += 12;
-        if (meridian?.toUpperCase() === 'AM' && h === 12) h = 0;
-        arriveDate.setHours(h, m, 0, 0);
+        const arriveDate = parseTimeToDate(updated.arriveTime, now);
+        // Account for multi-day journeys
+        if (updated.arriveDayOffset) {
+          arriveDate.setDate(arriveDate.getDate() + updated.arriveDayOffset);
+        }
 
         const delay = updated.realtime?.arrivalDelay ?? updated.realtime?.delay ?? 0;
         const adjustedArrival = new Date(arriveDate.getTime() + delay * 60 * 1000);
@@ -63,6 +64,16 @@ TaskManager.defineTask(BACKGROUND_TASK_NAME, async () => {
           hasNewData = true;
         }
       }
+    }
+
+    // Refresh widget snapshots after processing
+    try {
+      const allTrains = await TrainStorageService.getSavedTrains();
+      nextTrainWidget.updateSnapshot(selectNextTrain(allTrains));
+      const history = await TrainStorageService.getTripHistory();
+      travelStatsWidget.updateSnapshot(buildTravelStats(history));
+    } catch (widgetErr) {
+      logger.error('[BackgroundTask] Widget refresh failed:', widgetErr);
     }
 
     return hasNewData ? BackgroundFetch.BackgroundFetchResult.NewData : BackgroundFetch.BackgroundFetchResult.NoData;

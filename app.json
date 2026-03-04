@@ -15,7 +15,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.tracky.app",
       "infoPlist": {
-        "NSSupportsLiveActivities": true
+        "NSSupportsLiveActivities": true,
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -64,7 +65,15 @@
         "expo-background-fetch"
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      ["expo-widgets", {
+        "bundleIdentifier": "com.tracky.app.widgets",
+        "groupIdentifier": "group.com.tracky.app",
+        "widgets": [
+          { "name": "NextTrainWidget", "displayName": "Next Train", "supportedFamilies": ["systemSmall", "systemMedium"] },
+          { "name": "TravelStatsWidget", "displayName": "Travel Stats", "supportedFamilies": ["systemSmall", "systemMedium"] }
+        ]
+      }]
     ],
     "experiments": {
       "typedRoutes": true,

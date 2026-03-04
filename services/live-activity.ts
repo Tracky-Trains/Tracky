@@ -1,21 +1,15 @@
 import { Platform } from 'react-native';
+import type { LiveActivity } from 'expo-widgets';
+import { trainLiveActivity, type TrainActivityProps } from '../widgets/TrainLiveActivity';
 import type { Train } from '../types/train';
 import { parseTimeToDate } from '../utils/time-formatting';
 import { logger } from '../utils/logger';
 
-// Map of "tripId-fromCode-toCode" -> activityId
-const activeActivities = new Map<string, string>();
+// Map of "tripId|fromCode|toCode" -> LiveActivity instance
+const activeActivities = new Map<string, LiveActivity<TrainActivityProps>>();
 
 function activityKey(train: Train): string {
-  return `${train.tripId}-${train.fromCode}-${train.toCode}`;
-}
-
-function getLiveActivityModule(): typeof import('expo-live-activity') | null {
-  try {
-    return require('expo-live-activity') as typeof import('expo-live-activity');
-  } catch {
-    return null;
-  }
+  return `${train.tripId}|${train.fromCode}|${train.toCode}`;
 }
 
 export function isSupported(): boolean {
@@ -30,6 +24,15 @@ export function isTrainActiveNow(train: Train): boolean {
   const now = new Date();
   const departDate = parseTimeToDate(train.departTime, now);
   const arriveDate = parseTimeToDate(train.arriveTime, now);
+
+  // Account for multi-day journeys
+  if (train.departDayOffset) {
+    departDate.setDate(departDate.getDate() + train.departDayOffset);
+  }
+  if (train.arriveDayOffset) {
+    arriveDate.setDate(arriveDate.getDate() + train.arriveDayOffset);
+  }
+
   const delay = train.realtime?.delay || 0;
 
   // Window: 2h before departure through arrival + delay
@@ -39,6 +42,24 @@ export function isTrainActiveNow(train: Train): boolean {
   return now >= windowStart && now <= windowEnd;
 }
 
+function buildProps(train: Train): TrainActivityProps {
+  const delay = train.realtime?.delay ?? 0;
+  const status = delay > 0 ? 'delayed' : delay < 0 ? 'early' : 'on-time';
+  return {
+    trainNumber: train.trainNumber,
+    routeName: train.routeName,
+    fromCode: train.fromCode,
+    toCode: train.toCode,
+    from: train.from,
+    to: train.to,
+    departTime: train.departTime,
+    arriveTime: train.arriveTime,
+    delayMinutes: delay,
+    status,
+    lastUpdated: Date.now(),
+  };
+}
+
 export async function startForTrain(train: Train): Promise<void> {
   if (!isSupported()) return;
 
@@ -46,34 +67,8 @@ export async function startForTrain(train: Train): Promise<void> {
   if (activeActivities.has(key)) return;
 
   try {
-    const LA = getLiveActivityModule();
-    if (!LA) {
-      logger.debug('[LiveActivity] expo-live-activity not available');
-      return;
-    }
-
-    const delay = train.realtime?.delay ?? 0;
-    const status = delay > 0 ? 'delayed' : delay < 0 ? 'early' : 'on-time';
-
-    const activityId = await LA.startActivity({
-      data: {
-        trainNumber: train.trainNumber,
-        routeName: train.routeName,
-        fromCode: train.fromCode,
-        toCode: train.toCode,
-        from: train.from,
-        to: train.to,
-        departTime: train.departTime,
-        arriveTime: train.arriveTime,
-      },
-      state: {
-        delayMinutes: delay,
-        status,
-        lastUpdated: Date.now(),
-      },
-    });
-
-    activeActivities.set(key, activityId);
+    const activity = trainLiveActivity.start(buildProps(train));
+    activeActivities.set(key, activity);
     logger.info(`[LiveActivity] Started for ${train.trainNumber} (${key})`);
   } catch (e) {
     logger.error(`[LiveActivity] Failed to start for ${train.trainNumber}:`, e);
@@ -84,23 +79,11 @@ export async function updateForTrain(train: Train): Promise<void> {
   if (!isSupported()) return;
 
   const key = activityKey(train);
-  const activityId = activeActivities.get(key);
-  if (!activityId) return;
+  const activity = activeActivities.get(key);
+  if (!activity) return;
 
   try {
-    const LA = getLiveActivityModule();
-    if (!LA) return;
-
-    const delay = train.realtime?.delay ?? 0;
-    const status = delay > 0 ? 'delayed' : delay < 0 ? 'early' : 'on-time';
-
-    await LA.updateActivity(activityId, {
-      state: {
-        delayMinutes: delay,
-        status,
-        lastUpdated: Date.now(),
-      },
-    });
+    await activity.update(buildProps(train));
   } catch (e) {
     logger.error(`[LiveActivity] Failed to update for ${train.trainNumber}:`, e);
   }
@@ -109,15 +92,12 @@ export async function updateForTrain(train: Train): Promise<void> {
 export async function endForTrain(tripId: string, fromCode: string, toCode: string): Promise<void> {
   if (!isSupported()) return;
 
-  const key = `${tripId}-${fromCode}-${toCode}`;
-  const activityId = activeActivities.get(key);
-  if (!activityId) return;
+  const key = `${tripId}|${fromCode}|${toCode}`;
+  const activity = activeActivities.get(key);
+  if (!activity) return;
 
   try {
-    const LA = getLiveActivityModule();
-    if (!LA) return;
-
-    await LA.endActivity(activityId);
+    await activity.end('default');
     activeActivities.delete(key);
     logger.info(`[LiveActivity] Ended for ${key}`);
   } catch (e) {
@@ -127,7 +107,7 @@ export async function endForTrain(tripId: string, fromCode: string, toCode: stri
 
 export async function endAll(): Promise<void> {
   for (const [key] of activeActivities) {
-    const [tripId, fromCode, toCode] = key.split('-');
+    const [tripId, fromCode, toCode] = key.split('|');
     await endForTrain(tripId, fromCode, toCode);
   }
 }

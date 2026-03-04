@@ -57,7 +57,7 @@ const TEMP_OPTIONS: { label: string; value: TempUnit }[] = [
 const DISTANCE_OPTIONS: { label: string; value: DistanceUnit; desc: string }[] = [
   { label: 'Miles', value: 'mi', desc: 'mi' },
   { label: 'Kilometers', value: 'km', desc: 'km' },
-  { label: '🍔', value: 'burgers', desc: '🍔' },
+  { label: '🌭', value: 'hotdogs', desc: '🌭' },
 ];
 
 const LOG_FILTER_KEY = 'DEBUG_LOG_FILTER';
@@ -441,49 +441,30 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
 
   const handleTestLiveActivity = useCallback(() => {
     const startTest = async (action: string) => {
-      const LiveActivity = (() => {
-        try {
-          return require('expo-live-activity') as typeof import('expo-live-activity');
-        } catch {
-          return null;
-        }
-      })();
-
-      if (!LiveActivity) {
-        Alert.alert('Not Available', 'expo-live-activity is not installed in this build.');
-        return;
-      }
-
       if (action === 'start') {
         try {
-          const id = await LiveActivity.startActivity({
-            data: {
-              trainNumber: '91',
-              routeName: 'Northeast Regional',
-              fromCode: 'NYP',
-              toCode: 'BOS',
-              from: 'New York',
-              to: 'Boston',
-              departTime: '2:30 PM',
-              arriveTime: '6:45 PM',
-            },
-            state: {
-              delayMinutes: 12,
-              status: 'delayed',
-              lastUpdated: Date.now(),
-            },
+          const { trainLiveActivity } = require('../widgets/TrainLiveActivity');
+          const activity = trainLiveActivity.start({
+            trainNumber: '91',
+            routeName: 'Northeast Regional',
+            fromCode: 'NYP',
+            toCode: 'BOS',
+            from: 'New York',
+            to: 'Boston',
+            departTime: '2:30 PM',
+            arriveTime: '6:45 PM',
+            delayMinutes: 12,
+            status: 'delayed',
+            lastUpdated: Date.now(),
           });
-          logger.info(`[Debug] Started test Live Activity: ${id}`);
-          Alert.alert('Live Activity Started', `Activity ID: ${id}`);
+          logger.info('[Debug] Started test Live Activity');
+          Alert.alert('Live Activity Started', `Activity started: ${activity ? 'yes' : 'no'}`);
         } catch (e) {
           Alert.alert('Error', String(e));
         }
-      } else if (action === 'update') {
-        Alert.alert('Info', 'Update requires an active Live Activity started from a real train.');
       } else if (action === 'end') {
         try {
-          // End all known activities
-          const { endAll } = require('../services/live-activity') as typeof import('../../services/live-activity');
+          const { endAll } = require('../services/live-activity');
           await endAll();
           logger.info('[Debug] Ended all Live Activities');
           Alert.alert('Done', 'All Live Activities ended.');
@@ -641,7 +622,7 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
         </TouchableOpacity>
       </View>
 
-      {distanceUnit === 'burgers' && (
+      {distanceUnit === 'hotdogs' && (
         <>
           <Text style={styles.sectionHeader}>DEBUG</Text>
           <View style={styles.settingsList}>
