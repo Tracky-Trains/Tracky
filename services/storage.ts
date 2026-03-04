@@ -7,12 +7,28 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { CompletedTrip, SavedTrainRef, Train } from '../types/train';
 import { TrainAPIService } from './api';
 
+// Simple mutex to serialize read-modify-write operations per storage key,
+// preventing concurrent callers from overwriting each other's changes.
+const locks = new Map<string, Promise<unknown>>();
+async function withLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const prev = locks.get(key) ?? Promise.resolve();
+  const next = prev.then(fn, fn);
+  locks.set(key, next);
+  try {
+    return await next;
+  } finally {
+    // Clean up if we're still the latest in the chain
+    if (locks.get(key) === next) locks.delete(key);
+  }
+}
+
 const STORAGE_KEYS = {
   SAVED_TRAINS: 'savedTrainRefs',
   TRIP_HISTORY: 'tripHistory',
   USER_PREFERENCES: 'userPreferences',
   CALENDAR_SYNC_PREFS: 'calendarSyncPrefs',
   NOTIFICATION_PREFS: 'notificationPrefs',
+  SENT_ARRIVAL_ALERTS: 'sentArrivalAlerts',
 } as const;
 
 export interface CalendarSyncPrefs {
@@ -139,28 +155,30 @@ export class TrainStorageService {
    * Save a train reference to the list
    */
   static async saveTrainRef(ref: SavedTrainRef): Promise<boolean> {
-    try {
-      const refs = await this.getSavedTrainRefs();
+    return withLock(STORAGE_KEYS.SAVED_TRAINS, async () => {
+      try {
+        const refs = await this.getSavedTrainRefs();
 
-      // Check if train already exists (same tripId, segment, and travel date)
-      const exists = refs.some(
-        r =>
-          r.tripId === ref.tripId &&
-          r.fromCode === ref.fromCode &&
-          r.toCode === ref.toCode &&
-          r.travelDate === ref.travelDate
-      );
-      if (exists) {
+        // Check if train already exists (same tripId, segment, and travel date)
+        const exists = refs.some(
+          r =>
+            r.tripId === ref.tripId &&
+            r.fromCode === ref.fromCode &&
+            r.toCode === ref.toCode &&
+            r.travelDate === ref.travelDate
+        );
+        if (exists) {
+          return false;
+        }
+
+        const updatedRefs = [...refs, ref];
+        await AsyncStorage.setItem(STORAGE_KEYS.SAVED_TRAINS, JSON.stringify(updatedRefs));
+        return true;
+      } catch (error) {
+        logger.error('Error saving train ref:', error);
         return false;
       }
-
-      const updatedRefs = [...refs, ref];
-      await AsyncStorage.setItem(STORAGE_KEYS.SAVED_TRAINS, JSON.stringify(updatedRefs));
-      return true;
-    } catch (error) {
-      logger.error('Error saving train ref:', error);
-      return false;
-    }
+    });
   }
 
   /**
@@ -192,29 +210,31 @@ export class TrainStorageService {
     toCode?: string,
     travelDate?: number
   ): Promise<boolean> {
-    try {
-      logger.info(
-        `[Storage] Deleting train ${tripId} (${fromCode || '?'} → ${toCode || '?'}, date=${travelDate || '?'})`
-      );
-      const refs = await this.getSavedTrainRefs();
-      const updatedRefs = refs.filter(r => {
-        if (r.tripId !== tripId) return true;
-        // If segment codes provided, only delete matching segment
-        if (fromCode !== undefined || toCode !== undefined) {
-          if (r.fromCode !== fromCode || r.toCode !== toCode) return true;
-        }
-        // If travelDate provided, only delete matching date
-        if (travelDate !== undefined) {
-          return r.travelDate !== travelDate;
-        }
+    return withLock(STORAGE_KEYS.SAVED_TRAINS, async () => {
+      try {
+        logger.info(
+          `[Storage] Deleting train ${tripId} (${fromCode || '?'} → ${toCode || '?'}, date=${travelDate || '?'})`
+        );
+        const refs = await this.getSavedTrainRefs();
+        const updatedRefs = refs.filter(r => {
+          if (r.tripId !== tripId) return true;
+          // If segment codes provided, only delete matching segment
+          if (fromCode !== undefined || toCode !== undefined) {
+            if (r.fromCode !== fromCode || r.toCode !== toCode) return true;
+          }
+          // If travelDate provided, only delete matching date
+          if (travelDate !== undefined) {
+            return r.travelDate !== travelDate;
+          }
+          return false;
+        });
+        await AsyncStorage.setItem(STORAGE_KEYS.SAVED_TRAINS, JSON.stringify(updatedRefs));
+        return true;
+      } catch (error) {
+        logger.error('Error deleting train:', error);
         return false;
-      });
-      await AsyncStorage.setItem(STORAGE_KEYS.SAVED_TRAINS, JSON.stringify(updatedRefs));
-      return true;
-    } catch (error) {
-      logger.error('Error deleting train:', error);
-      return false;
-    }
+      }
+    });
   }
 
   /**
@@ -302,25 +322,27 @@ export class TrainStorageService {
    * Returns true if the entry was added, false if it already existed.
    */
   static async addToHistory(entry: CompletedTrip): Promise<boolean> {
-    try {
-      const history = await this.getTripHistory();
-      const exists = history.some(
-        h =>
-          h.tripId === entry.tripId &&
-          h.fromCode === entry.fromCode &&
-          h.toCode === entry.toCode &&
-          h.travelDate === entry.travelDate
-      );
-      if (exists) {
+    return withLock(STORAGE_KEYS.TRIP_HISTORY, async () => {
+      try {
+        const history = await this.getTripHistory();
+        const exists = history.some(
+          h =>
+            h.tripId === entry.tripId &&
+            h.fromCode === entry.fromCode &&
+            h.toCode === entry.toCode &&
+            h.travelDate === entry.travelDate
+        );
+        if (exists) {
+          return false;
+        }
+        history.unshift(entry);
+        await AsyncStorage.setItem(STORAGE_KEYS.TRIP_HISTORY, JSON.stringify(history));
+        return true;
+      } catch (error) {
+        logger.error('Error adding to history:', error);
         return false;
       }
-      history.unshift(entry);
-      await AsyncStorage.setItem(STORAGE_KEYS.TRIP_HISTORY, JSON.stringify(history));
-      return true;
-    } catch (error) {
-      logger.error('Error adding to history:', error);
-      return false;
-    }
+    });
   }
 
   /**
@@ -400,22 +422,24 @@ export class TrainStorageService {
     toCode: string,
     travelDate?: number
   ): Promise<boolean> {
-    try {
-      const history = await this.getTripHistory();
-      const updated = history.filter(h => {
-        if (h.tripId !== tripId || h.fromCode !== fromCode || h.toCode !== toCode) return true;
-        // If travelDate provided, only delete matching date
-        if (travelDate !== undefined) {
-          return h.travelDate !== travelDate;
-        }
+    return withLock(STORAGE_KEYS.TRIP_HISTORY, async () => {
+      try {
+        const history = await this.getTripHistory();
+        const updated = history.filter(h => {
+          if (h.tripId !== tripId || h.fromCode !== fromCode || h.toCode !== toCode) return true;
+          // If travelDate provided, only delete matching date
+          if (travelDate !== undefined) {
+            return h.travelDate !== travelDate;
+          }
+          return false;
+        });
+        await AsyncStorage.setItem(STORAGE_KEYS.TRIP_HISTORY, JSON.stringify(updated));
+        return true;
+      } catch (error) {
+        logger.error('Error deleting from history:', error);
         return false;
-      });
-      await AsyncStorage.setItem(STORAGE_KEYS.TRIP_HISTORY, JSON.stringify(updated));
-      return true;
-    } catch (error) {
-      logger.error('Error deleting from history:', error);
-      return false;
-    }
+      }
+    });
   }
 
   /**
@@ -442,6 +466,49 @@ export class TrainStorageService {
       logger.error('Error saving calendar sync prefs:', error);
       return false;
     }
+  }
+
+  /**
+   * Get the set of train keys for which arrival alerts have already been sent.
+   */
+  static async getSentArrivalAlerts(): Promise<Set<string>> {
+    try {
+      const data = await AsyncStorage.getItem(STORAGE_KEYS.SENT_ARRIVAL_ALERTS);
+      return data ? new Set(JSON.parse(data)) : new Set();
+    } catch (error) {
+      logger.error('Error loading sent arrival alerts:', error);
+      return new Set();
+    }
+  }
+
+  /**
+   * Mark a train key as having had its arrival alert sent (persisted).
+   */
+  static async markArrivalAlertSent(key: string): Promise<void> {
+    return withLock(STORAGE_KEYS.SENT_ARRIVAL_ALERTS, async () => {
+      try {
+        const sent = await this.getSentArrivalAlerts();
+        sent.add(key);
+        await AsyncStorage.setItem(STORAGE_KEYS.SENT_ARRIVAL_ALERTS, JSON.stringify([...sent]));
+      } catch (error) {
+        logger.error('Error saving sent arrival alert:', error);
+      }
+    });
+  }
+
+  /**
+   * Remove a train key from the sent arrival alerts set.
+   */
+  static async clearArrivalAlert(key: string): Promise<void> {
+    return withLock(STORAGE_KEYS.SENT_ARRIVAL_ALERTS, async () => {
+      try {
+        const sent = await this.getSentArrivalAlerts();
+        sent.delete(key);
+        await AsyncStorage.setItem(STORAGE_KEYS.SENT_ARRIVAL_ALERTS, JSON.stringify([...sent]));
+      } catch (error) {
+        logger.error('Error clearing arrival alert:', error);
+      }
+    });
   }
 
   static async getNotificationPrefs(): Promise<NotificationPrefs> {

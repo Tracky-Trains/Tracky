@@ -105,15 +105,3 @@ export function formatDuration(minutes: number): string {
   }
 }
 
-export function formatDistance(miles: number): string {
-  if (miles >= 1000) {
-    return `${(miles / 1000).toFixed(1)}k mi`;
-  }
-  return `${Math.round(miles).toLocaleString()} mi`;
-}
-
-export function getYearsList(): number[] {
-  const currentYear = new Date().getFullYear();
-  // Return current year and 2 previous years
-  return [currentYear, currentYear - 1, currentYear - 2];
-}

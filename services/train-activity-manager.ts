@@ -13,11 +13,13 @@ import { logger } from '../utils/logger';
 // Cached prefs — refreshed on startup and when changed
 let cachedPrefs: NotificationPrefs = DEFAULT_NOTIFICATION_PREFS;
 
-// Track which trains we've already sent arrival alerts for (to avoid duplicates)
+// Track which trains we've already sent arrival alerts for (to avoid duplicates).
+// This in-memory set is synced from persistent storage on startup so both
+// foreground and background code paths share the same dedup state.
 const sentArrivalAlerts = new Set<string>();
 
 function trainKey(train: Train): string {
-  return `${train.tripId}-${train.fromCode}-${train.toCode}`;
+  return `${train.tripId}|${train.fromCode}|${train.toCode}`;
 }
 
 async function loadPrefs(): Promise<NotificationPrefs> {
@@ -86,7 +88,9 @@ export const TrainActivityManager = {
   async onTrainDeleted(tripId: string, fromCode: string, toCode: string): Promise<void> {
     await NotificationService.cancelRemindersForTrain(tripId, fromCode, toCode);
     await LiveActivityService.endForTrain(tripId, fromCode, toCode);
-    sentArrivalAlerts.delete(`${tripId}-${fromCode}-${toCode}`);
+    const deletedKey = `${tripId}|${fromCode}|${toCode}`;
+    sentArrivalAlerts.delete(deletedKey);
+    await TrainStorageService.clearArrivalAlert(deletedKey);
 
     const remaining = await TrainStorageService.getSavedTrains();
     refreshNextTrainWidget(remaining);
@@ -95,7 +99,9 @@ export const TrainActivityManager = {
   async onTrainArchived(train: Train): Promise<void> {
     await NotificationService.cancelRemindersForTrain(train.tripId || '', train.fromCode, train.toCode);
     await LiveActivityService.endForTrain(train.tripId || '', train.fromCode, train.toCode);
-    sentArrivalAlerts.delete(trainKey(train));
+    const archivedKey = trainKey(train);
+    sentArrivalAlerts.delete(archivedKey);
+    await TrainStorageService.clearArrivalAlert(archivedKey);
 
     const remaining = await TrainStorageService.getSavedTrains();
     refreshNextTrainWidget(remaining);
@@ -137,6 +143,7 @@ export const TrainActivityManager = {
       // Arrival detection
       if (prefs.arrivalAlerts && !sentArrivalAlerts.has(key) && isArrived(newTrain)) {
         sentArrivalAlerts.add(key);
+        await TrainStorageService.markArrivalAlertSent(key);
         await NotificationService.sendArrivalAlert(newTrain);
 
         if (prefs.liveActivities) {
@@ -150,6 +157,10 @@ export const TrainActivityManager = {
     // Refresh widgets on every startup
     refreshNextTrainWidget(trains);
     refreshStatsWidget();
+
+    // Restore persisted arrival alert dedup set
+    const persisted = await TrainStorageService.getSentArrivalAlerts();
+    for (const key of persisted) sentArrivalAlerts.add(key);
 
     const prefs = await loadPrefs();
     if (!hasAnyFeatureEnabled(prefs)) return;

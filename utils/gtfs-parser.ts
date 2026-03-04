@@ -415,18 +415,6 @@ export class GTFSParser {
     return result;
   }
 
-  // Get shapes grouped by route
-  getShapesByRoute(): Map<string, Array<{ id: string; coordinates: Array<{ latitude: number; longitude: number }> }>> {
-    const shapesByRoute = new Map<
-      string,
-      Array<{ id: string; coordinates: Array<{ latitude: number; longitude: number }> }>
-    >();
-    // Return all shapes grouped together
-    const allShapes = this.getShapesForMap();
-    shapesByRoute.set('all', allShapes);
-    return shapesByRoute;
-  }
-
   /**
    * Unified search returning categorized results for the initial search bar.
    * Returns trains, routes, and stations in separate arrays.

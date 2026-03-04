@@ -159,7 +159,12 @@ function parseTripUpdates(buffer: Uint8Array): Map<string, RealtimeUpdate[]> {
             stop_id: stopTime.stopId ?? undefined,
             arrival_delay: stopTime.arrival?.delay ?? undefined,
             departure_delay: stopTime.departure?.delay ?? undefined,
-            schedule_relationship: stopTime.scheduleRelationship === 1 ? 'SCHEDULED' : 'NO_DATA',
+            schedule_relationship:
+              stopTime.scheduleRelationship === 0
+                ? 'SCHEDULED'
+                : stopTime.scheduleRelationship === 1
+                  ? 'SKIPPED'
+                  : 'NO_DATA',
           });
         }
 

@@ -325,7 +325,7 @@ const AMTRAK_ROUTE_NAMES: Record<string, string> = {
  * Get the route name for a train number
  * Returns the named route (e.g., "Pennsylvanian") or null if not a named train
  */
-export function getRouteNameForTrainNumber(trainNumber: string): string | null {
+function getRouteNameForTrainNumber(trainNumber: string): string | null {
   return AMTRAK_ROUTE_NAMES[trainNumber] || null;
 }
 
@@ -523,51 +523,4 @@ export class TrainAPIService {
     return updatedTrain;
   }
 
-  /**
-   * Get all trains currently active with real-time positions
-   * Useful for displaying live trains on a map
-   */
-  static async getActiveTrains(): Promise<Train[]> {
-    try {
-      const activeTrains = await RealtimeService.getAllActiveTrains();
-      logger.debug(`[API] getActiveTrains: ${activeTrains.length} active`);
-      const trains: Train[] = [];
-
-      for (const { trainNumber, position } of activeTrains) {
-        // Try to get train details from GTFS
-        let train = await this.getTrainDetails(trainNumber);
-
-        // If not found in GTFS, create a minimal train object
-        if (!train) {
-          train = {
-            id: parseInt(trainNumber) || 0,
-            operator: 'AMTK',
-            trainNumber: trainNumber,
-            from: 'Unknown',
-            to: 'Unknown',
-            fromCode: '',
-            toCode: '',
-            departTime: '',
-            arriveTime: '',
-            date: 'Today',
-            daysAway: 0,
-            routeName: `Train ${trainNumber}`,
-            tripId: position.trip_id,
-            realtime: {
-              position: { lat: position.latitude, lon: position.longitude },
-              lastUpdated: position.timestamp,
-              status: 'Live',
-            },
-          };
-        }
-
-        trains.push(train);
-      }
-
-      return trains;
-    } catch (error) {
-      logger.error('Error fetching active trains:', error);
-      return [];
-    }
-  }
 }

@@ -4,7 +4,6 @@ import {
   getDaysAwayLabel,
   isSameDay,
   getStartOfDay,
-  getEndOfDay,
   addDays,
 } from '../../utils/date-helpers';
 
@@ -104,21 +103,6 @@ describe('date-helpers utilities', () => {
       expect(result.getMinutes()).toBe(0);
       expect(result.getSeconds()).toBe(0);
       expect(result.getMilliseconds()).toBe(0);
-    });
-  });
-
-  describe('getEndOfDay', () => {
-    it('should set time to 23:59:59.999', () => {
-      const date = new Date(2024, 0, 15, 14, 30, 0);
-      const result = getEndOfDay(date);
-
-      expect(result.getFullYear()).toBe(2024);
-      expect(result.getMonth()).toBe(0);
-      expect(result.getDate()).toBe(15);
-      expect(result.getHours()).toBe(23);
-      expect(result.getMinutes()).toBe(59);
-      expect(result.getSeconds()).toBe(59);
-      expect(result.getMilliseconds()).toBe(999);
     });
   });
 

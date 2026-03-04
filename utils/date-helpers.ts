@@ -77,17 +77,6 @@ export function getStartOfDay(date: Date): Date {
 }
 
 /**
- * Get the end of day (23:59:59.999) for a given date
- * @param date - Input date
- * @returns New Date object set to end of day
- */
-export function getEndOfDay(date: Date): Date {
-  const d = new Date(date);
-  d.setHours(23, 59, 59, 999);
-  return d;
-}
-
-/**
  * Add days to a date
  * @param date - Base date
  * @param days - Number of days to add (can be negative)

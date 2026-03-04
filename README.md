@@ -56,7 +56,7 @@ The app is designed around a single map screen with a stack of gesture-driven bo
 ### Settings
 
 - Temperature units (Fahrenheit / Celsius)
-- Distance units (miles / kilometers / burgers)
+- Distance units (miles / kilometers / hotdogs)
 - Calendar sync: scan device calendars for Amtrak trips and auto-import them
 - Data providers page listing all external data sources
 - Debug log viewer with filtering by severity level

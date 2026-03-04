@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
 export type TempUnit = 'F' | 'C';
-export type DistanceUnit = 'mi' | 'km' | 'burgers';
+export type DistanceUnit = 'mi' | 'km' | 'hotdogs';
 
 interface UnitsContextType {
   tempUnit: TempUnit;

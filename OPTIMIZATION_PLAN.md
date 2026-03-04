@@ -6,56 +6,56 @@ Comprehensive audit of the codebase identifying bloat, dead code, bugs, duplicat
 
 ## 1. Dead Code Removal
 
-### 1a. Delete orphaned files
-| File | Lines | Reason |
+### 1a. Delete orphaned files — DONE
+| File | Lines | Status |
 |------|-------|--------|
-| `services/train-activity-manager.ts` | 175 | Never imported anywhere in the codebase |
-| `types/gtfs-schemas.ts` | 117 | Zod schemas never imported; runtime data is unvalidated |
-| `components/ui/icon-symbol.tsx` | 41 | Expo template boilerplate; no component uses it |
-| `components/ui/icon-symbol.ios.tsx` | 32 | Same — unused platform variant |
-| `assets/gtfs-data/routes.json` | — | Contains `[]`; app fetches GTFS from network |
-| `assets/gtfs-data/stops.json` | — | Contains `{}`; leftover stub |
-| `assets/gtfs-data/shapes.json` | — | Contains `[]`; leftover stub |
-| `assets/gtfs-data/stop-times.json` | — | Contains `[]`; leftover stub |
+| ~~`types/gtfs-schemas.ts`~~ | 117 | Deleted |
+| ~~`components/ui/icon-symbol.tsx`~~ | 41 | Deleted |
+| ~~`components/ui/icon-symbol.ios.tsx`~~ | 32 | Deleted |
+| ~~`assets/gtfs-data/*`~~ | — | Deleted (empty stubs) |
 
-**Estimated removal: ~365 lines + empty asset stubs**
+**Not deleted (verified still imported):**
+- `services/train-activity-manager.ts` — imported by `useRealtime.ts`, `ModalContent.tsx`, `SettingsModal.tsx`
 
-### 1b. Delete dead functions/exports
-| Location | Function | Reason |
+### 1b. Delete dead functions/exports — DONE
+| Location | Function | Status |
 |----------|----------|--------|
-| `services/gtfs-sync.ts` | `writeJSONToFile` + `GTFS_CACHE_DIR` | Never called; app uses AsyncStorage exclusively |
-| `services/api.ts` | `getActiveTrains()` | Never called; app uses `RealtimeService.getAllActiveTrains()` instead |
-| `services/api.ts` | `getRouteNameForTrainNumber` (export) | Only used internally in same file; remove `export` keyword |
-| `utils/profile-stats.ts` | `getYearsList()` | Zero import sites; `ProfileModal` computes its own year list inline |
-| `utils/train-helpers.ts` | `formatTrainNumber`, `matchTrainNumber`, `normalizeTrainNumber` | Only called in tests, never in production code |
-| `utils/gtfs-parser.ts` | `getShapesByRoute()` | Never called; always returns everything under key `'all'` anyway |
-| `utils/route-colors.ts` | Entire file (31 lines) | Both functions return constant values regardless of input — complete no-ops |
-| `utils/units.ts` | `MILES_PER_BURGER` constant | Declared but never referenced; inline literal `26_490` used instead |
-| `utils/date-helpers.ts` | `getEndOfDay()` | Only used in tests, not in production code |
-| `utils/profile-stats.ts` | `formatDistance()` | Shadows the real one in `utils/units.ts`; never imported |
-| `context/ModalContext.tsx` | `getInitialSnap` `type` param | Parameter is accepted but silently ignored |
+| ~~`services/gtfs-sync.ts`~~ | `writeJSONToFile` + `GTFS_CACHE_DIR` + `expo-file-system` import | Removed |
+| ~~`services/api.ts`~~ | `getActiveTrains()` | Removed |
+| ~~`services/api.ts`~~ | `getRouteNameForTrainNumber` export keyword | Removed (function kept, export dropped) |
+| ~~`utils/profile-stats.ts`~~ | `getYearsList()` + `formatDistance()` | Removed |
+| ~~`utils/train-helpers.ts`~~ | `formatTrainNumber`, `matchTrainNumber`, `normalizeTrainNumber` | Removed |
+| ~~`utils/gtfs-parser.ts`~~ | `getShapesByRoute()` | Removed |
+| ~~`utils/units.ts`~~ | `MILES_PER_HOTDOG` constant | Removed |
+| ~~`utils/date-helpers.ts`~~ | `getEndOfDay()` | Removed |
+| ~~`components/ui/ProfileModal.tsx`~~ | Commented-out "Rail Friends" button | Removed |
 
-### 1c. Remove commented-out code
-| Location | What |
-|----------|------|
-| `components/ui/ProfileModal.tsx:429-436` | Commented-out "Rail Friends" button |
+**Not removed (verified still used):**
+- `utils/route-colors.ts` — actively imported by `MapScreen.tsx` (functions return constants but are called)
+- `context/ModalContext.tsx` `getInitialSnap` `type` param — minor, deferred
+
+### 1c. Test cleanup — DONE
+- Removed tests for `formatTrainNumber`, `matchTrainNumber`, `normalizeTrainNumber`, `getEndOfDay`
+- All 40 remaining tests pass
 
 ---
 
-## 2. Unused Dependencies
+## 2. Unused Dependencies — DONE
 
-Remove from `package.json`:
+Removed from `package.json`:
 
-| Package | Reason |
+| Package | Status |
 |---------|--------|
-| `lucide-react-native` | Zero imports in any source file |
-| `expo-symbols` | Zero imports in any source file |
-| `@expo/vector-icons` | App uses `react-native-vector-icons` exclusively |
-| `zod` | Only used in `types/gtfs-schemas.ts` which is itself dead code |
-| `expo-image` | Zero imports in any source file |
-| `expo-network` | Zero imports in any source file |
+| ~~`lucide-react-native`~~ | Uninstalled |
+| ~~`expo-symbols`~~ | Uninstalled |
+| ~~`@expo/vector-icons`~~ | Uninstalled |
+| ~~`zod`~~ | Uninstalled |
+| ~~`expo-image`~~ | Uninstalled |
 
-Audit whether these are actually used or only transitive:
+**Not removed (verified still used):**
+- `expo-network` — actively used in `MapSettingsPill.tsx` for offline detection
+
+Still worth auditing:
 - `@react-navigation/bottom-tabs`, `@react-navigation/elements`, `@react-navigation/native` — app uses `expo-router` only
 - `@react-native-community/datetimepicker` — may be transitive via `react-native-calendars`
 - `react-native-web`, `react-dom` — web target exists in scripts but likely unused for production
@@ -128,7 +128,7 @@ Same fade-in on mount, fade-out/in on changes, same spring/timing params, same `
 ### 4h. Dual `activityKey`/`trainKey` functions
 `live-activity.ts` and `train-activity-manager.ts` define the same key-builder function.
 
-**Fix:** (Moot if `train-activity-manager.ts` is deleted per 1a, but if kept, unify.)
+**Fix:** Unify into a shared helper.
 
 ---
 
@@ -284,14 +284,13 @@ Three independent `setInterval` loops (MapScreen, useShapes, useStations) pollin
 
 ---
 
-## Priority Order
+## Priority Order (remaining work)
 
 1. **Bug fixes** (Section 3) — correctness issues, fix first
-2. **Dead code removal** (Sections 1-2) — immediate bloat reduction (~500+ lines + dependencies)
-3. **Duplicate code consolidation** (Section 4) — reduce maintenance surface
-4. **Performance fixes** (Section 7) — triple polling, missing memoization
-5. **Architectural improvements** (Section 5) — race conditions, coupling
-6. **Hardcoded values** (Section 8) — maintainability
-7. **Large file decomposition** (Section 6) — readability and maintainability
-8. **Type safety** (Section 9) — correctness guardrails
-9. **Minor cleanup** (Section 10) — polish
+2. **Duplicate code consolidation** (Section 4) — reduce maintenance surface
+3. **Performance fixes** (Section 7) — triple polling, missing memoization
+4. **Architectural improvements** (Section 5) — race conditions, coupling
+5. **Hardcoded values** (Section 8) — maintainability
+6. **Large file decomposition** (Section 6) — readability and maintainability
+7. **Type safety** (Section 9) — correctness guardrails
+8. **Minor cleanup** (Section 10) — polish

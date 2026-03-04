@@ -426,14 +426,6 @@ export default function ProfileModal({ onClose, onOpenSettings }: ProfileModalPr
 
       {/* Action Pills */}
       <View style={[styles.actionPillsContainer, { paddingHorizontal: Spacing.xl }]}>
-        {/* <TouchableOpacity
-          style={styles.actionPill}
-          activeOpacity={0.7}
-          onPress={() => {}}
-        >
-          <Ionicons name="people" size={14} color={AppColors.secondary} />
-          <Text style={styles.actionPillText}>Rail Friends</Text>
-        </TouchableOpacity> */}
         <TouchableOpacity style={styles.actionPill} activeOpacity={0.7} onPress={handleSettingsPress}>
           <Ionicons name="settings-sharp" size={14} color={AppColors.primary} />
           <Text style={styles.actionPillText}>Settings</Text>

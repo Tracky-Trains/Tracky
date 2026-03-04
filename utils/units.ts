@@ -1,8 +1,6 @@
 import type { DistanceUnit, TempUnit } from '../context/UnitsContext';
 
 const MILES_TO_KM = 1.60934;
-// Average hot dog is ~6 inches (0.5 feet) long
-const MILES_PER_HOTDOG = 1 / 10_560; // 5280 ft / 0.5 ft = 10,560 hotdogs per mile
 
 /**
  * Convert miles to the target distance unit.

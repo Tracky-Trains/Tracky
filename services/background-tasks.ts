@@ -4,6 +4,7 @@ import { TrainAPIService } from './api';
 import * as LiveActivityService from './live-activity';
 import * as NotificationService from './notifications';
 import { TrainStorageService } from './storage';
+import type { Train } from '../types/train';
 import { selectNextTrain, buildTravelStats } from './widget-data';
 import { nextTrainWidget } from '../widgets/NextTrainWidget';
 import { travelStatsWidget } from '../widgets/TravelStatsWidget';
@@ -28,6 +29,13 @@ TaskManager.defineTask(BACKGROUND_TASK_NAME, async () => {
 
     let hasNewData = false;
 
+    // Load persistent dedup set so background task doesn't re-send arrival alerts
+    const sentAlerts = await TrainStorageService.getSentArrivalAlerts();
+
+    function bgTrainKey(t: Train): string {
+      return `${t.tripId}|${t.fromCode}|${t.toCode}`;
+    }
+
     for (const train of todayTrains) {
       const updated = await TrainAPIService.refreshRealtimeData(train);
 
@@ -48,7 +56,8 @@ TaskManager.defineTask(BACKGROUND_TASK_NAME, async () => {
       }
 
       // Arrival detection (simple: arrival time + delay has passed)
-      if (prefs.arrivalAlerts && updated.arriveTime) {
+      const key = bgTrainKey(updated);
+      if (prefs.arrivalAlerts && updated.arriveTime && !sentAlerts.has(key)) {
         const now = new Date();
         const arriveDate = parseTimeToDate(updated.arriveTime, now);
         // Account for multi-day journeys
@@ -60,6 +69,8 @@ TaskManager.defineTask(BACKGROUND_TASK_NAME, async () => {
         const adjustedArrival = new Date(arriveDate.getTime() + delay * 60 * 1000);
 
         if (now >= adjustedArrival) {
+          sentAlerts.add(key);
+          await TrainStorageService.markArrivalAlertSent(key);
           await NotificationService.sendArrivalAlert(updated);
           hasNewData = true;
         }
