@@ -80,7 +80,7 @@ export const ModalProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [showMainContent, setShowMainContent] = useState(true);
   const [showTrainDetailContent, setShowTrainDetailContent] = useState(false);
   const [showDepartureBoardContent, setShowDepartureBoardContent] = useState(false);
-  const [showProfileContent, setShowProfileContent] = useState(false);
+  const [showProfileContent, setShowProfileContent] = useState(true);
   const [showSettingsContent, setShowSettingsContent] = useState(false);
 
   // Active modal tracking
@@ -300,7 +300,7 @@ export const ModalProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
 
     // Hide content of the dismissed modal to free resources
-    // Main and profile modals stay mounted to avoid re-initialization flash
+    // Main + Profile modals stay mounted to avoid re-initialization flash
     if (type === 'trainDetail') setShowTrainDetailContent(false);
     else if (type === 'departureBoard') setShowDepartureBoardContent(false);
     else if (type === 'settings') setShowSettingsContent(false);

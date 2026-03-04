@@ -749,7 +749,7 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
             </View>
             <View style={styles.itemContent}>
               <Text style={styles.itemTitle}>I'm Interested!</Text>
-              <Text style={styles.itemSubtitle}>Open a PR — the app is built with React Native</Text>
+              <Text style={styles.itemSubtitle}>Open a PR — Note: the app is built with Expo, not Swift</Text>
             </View>
             <Ionicons name="open-outline" size={18} color={AppColors.secondary} />
           </TouchableOpacity>

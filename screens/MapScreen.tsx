@@ -103,7 +103,6 @@ function MapScreenInner() {
 
   // Use centralized modal context
   const {
-    activeModal,
     showMainContent,
     showTrainDetailContent,
     showDepartureBoardContent,
@@ -746,7 +745,6 @@ function MapScreenInner() {
               }
             }}
             onOpenProfile={() => navigateToProfile()}
-            isActive={activeModal === 'main'}
           />
         )}
       </SlideUpModal>
@@ -802,7 +800,6 @@ function MapScreenInner() {
           <ProfileModal
             onClose={() => goBack()}
             onOpenSettings={() => navigateToSettings()}
-            isActive={activeModal === 'profile'}
           />
         )}
       </SlideUpModal>

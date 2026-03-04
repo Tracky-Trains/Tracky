@@ -15,6 +15,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppColors, BorderRadius, CloseButtonStyle, FontSizes, Spacing } from '../../constants/theme';
 import { PlaceholderBlurb } from '../PlaceholderBlurb';
+import { useModalContext } from '../../context/ModalContext';
 import { useUnits } from '../../context/UnitsContext';
 import { TrainStorageService } from '../../services/storage';
 import type { CompletedTrip } from '../../types/train';
@@ -26,7 +27,6 @@ import { SlideUpModalContext } from './slide-up-modal';
 interface ProfileModalProps {
   onClose: () => void;
   onOpenSettings: () => void;
-  isActive?: boolean;
 }
 
 function buildTicketArt(header: string, rows: [string, string][]): string {
@@ -192,13 +192,14 @@ const SwipeableHistoryCard = React.memo(function SwipeableHistoryCard({
 type SortField = 'date' | 'from' | 'to' | 'route';
 type SortDirection = 'asc' | 'desc';
 
-export default function ProfileModal({ onClose, onOpenSettings, isActive }: ProfileModalProps) {
+export default function ProfileModal({ onClose, onOpenSettings }: ProfileModalProps) {
   const [history, setHistory] = useState<CompletedTrip[]>([]);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const { isFullscreen, scrollOffset, panRef } = React.useContext(SlideUpModalContext);
   const { distanceUnit } = useUnits();
+  const { activeModal } = useModalContext();
 
   const currentYear = new Date().getFullYear();
 
@@ -212,8 +213,11 @@ export default function ProfileModal({ onClose, onOpenSettings, isActive }: Prof
     return Array.from(yearSet).sort((a, b) => b - a);
   }, [history]);
 
+  const isActive = activeModal === 'profile';
+
+  // Load history on mount and refresh when profile becomes active
   useEffect(() => {
-    if (isActive === false) return;
+    if (!isActive) return;
     TrainStorageService.backfillHistoryStats()
       .then(() => TrainStorageService.getTripHistory())
       .then(setHistory);
@@ -540,7 +544,6 @@ export default function ProfileModal({ onClose, onOpenSettings, isActive }: Prof
         </View>
 
         {/* Delay Stats Card */}
-        {stats.delayedTripsCount > 0 && (
           <View style={styles.delayCard}>
             <View style={styles.delayHeader}>
               <Text style={styles.delayBigNumber}>{Math.floor(stats.totalDelayMinutes / 60)}</Text>
@@ -554,7 +557,9 @@ export default function ProfileModal({ onClose, onOpenSettings, isActive }: Prof
             </View>
             <Text style={styles.delayTitle}>hours lost from delays</Text>
             <Text style={styles.delaySubtext}>
-              Delayed trips averaged {Math.round(stats.averageDelayMinutes)}m late
+              {stats.delayedTripsCount > 0
+                ? `Delayed trips averaged ${Math.round(stats.averageDelayMinutes)}m late`
+                : 'No delays recorded yet'}
             </Text>
             <TouchableOpacity
               style={styles.delayButton}
@@ -565,7 +570,6 @@ export default function ProfileModal({ onClose, onOpenSettings, isActive }: Prof
               <Ionicons name="chevron-forward" size={16} color={AppColors.primary} />
             </TouchableOpacity>
           </View>
-        )}
 
         {/* Most Ridden Route Card */}
         {stats.mostRiddenRoute && stats.mostRiddenRoute.count > 1 && (

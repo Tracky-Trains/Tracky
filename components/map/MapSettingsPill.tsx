@@ -152,7 +152,7 @@ export default function MapSettingsPill({
     return {
       width: interpolate(expandProgress.value, [0, 1], [PILL_WIDTH, STRIP_WIDTH]),
       height: interpolate(expandProgress.value, [0, 1], [pillHeightShared.value, STRIP_HEIGHT]),
-      borderRadius: interpolate(expandProgress.value, [0, 1], [24, 16]),
+      borderRadius: interpolate(expandProgress.value, [0, 1], [24, STRIP_HEIGHT / 2]),
     };
   });
 

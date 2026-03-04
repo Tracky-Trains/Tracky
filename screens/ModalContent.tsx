@@ -7,6 +7,7 @@ import { TrainList } from '../components/TrainList';
 import { TwoStationSearch } from '../components/TwoStationSearch';
 import { SlideUpModalContext } from '../components/ui/slide-up-modal';
 import { useGTFSRefresh } from '../context/GTFSRefreshContext';
+import { useModalContext } from '../context/ModalContext';
 import { useTrainContext } from '../context/TrainContext';
 import { useFrequentlyUsed } from '../hooks/useFrequentlyUsed';
 import { hasCalendarPermission, syncFutureTrips } from '../services/calendar-sync';
@@ -23,8 +24,8 @@ export interface ModalContentHandle {
 
 export const ModalContent = React.forwardRef<
   ModalContentHandle,
-  { onTrainSelect?: (train: Train) => void; onOpenProfile?: () => void; isActive?: boolean }
->(function ModalContent({ onTrainSelect, onOpenProfile, isActive }, ref) {
+  { onTrainSelect?: (train: Train) => void; onOpenProfile?: () => void }
+>(function ModalContent({ onTrainSelect, onOpenProfile }, ref) {
   const { isFullscreen, isCollapsed, scrollOffset, contentOpacity, panRef, snapToPoint } =
     useContext(SlideUpModalContext);
 
@@ -37,6 +38,7 @@ export const ModalContent = React.forwardRef<
   const { savedTrains, setSavedTrains, setSelectedTrain } = useTrainContext();
   const { refresh: refreshFrequentlyUsed } = useFrequentlyUsed();
   const { isLoadingCache, initializeGTFS, triggerRefresh } = useGTFSRefresh();
+  const { activeModal } = useModalContext();
 
   // Refs to avoid stale closures in useEffect
   const refreshFrequentlyUsedRef = useRef(refreshFrequentlyUsed);
@@ -114,36 +116,12 @@ export const ModalContent = React.forwardRef<
     loadSavedTrains();
   }, [setSavedTrains, isLoadingCache]);
 
-  // Reload saved trains when returning to this modal (auto-archive + refresh)
-  const hasLoadedOnce = useRef(false);
+  // Refresh saved trains when main modal becomes active (returning from profile, etc.)
+  const isMainActive = activeModal === 'main';
   useEffect(() => {
-    if (!hasLoadedOnce.current) {
-      // Skip first activation — the mount effect above handles it
-      hasLoadedOnce.current = true;
-      return;
-    }
-    if (!isActive || isLoadingCache) return;
-    (async () => {
-      const trains = await TrainStorageService.getSavedTrains();
-      const now = new Date();
-      const pastTrains = trains.filter(t => {
-        if (!t.daysAway && t.daysAway !== 0) return false;
-        if (t.daysAway < 0) return true;
-        if (t.daysAway === 0 && t.arriveTime) {
-          const arriveDate = parseTimeToDate(t.arriveTime, now);
-          if (arriveDate.getTime() < now.getTime()) return true;
-        }
-        return false;
-      });
-      for (const train of pastTrains) {
-        await TrainStorageService.moveToHistory(train);
-      }
-      const updated = pastTrains.length > 0
-        ? await TrainStorageService.getSavedTrains()
-        : trains;
-      setSavedTrains(updated);
-    })();
-  }, [isActive, setSavedTrains, isLoadingCache]);
+    if (!isMainActive || !hasInitialized.current) return;
+    TrainStorageService.getSavedTrains().then(setSavedTrains);
+  }, [isMainActive, setSavedTrains]);
 
   // Load cached GTFS and check if refresh is needed on mount (runs once)
   useEffect(() => {
