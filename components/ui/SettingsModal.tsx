@@ -75,7 +75,7 @@ function formatLogDate(iso: string): string {
 export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalProps) {
   const { isFullscreen, scrollOffset, panRef } = useContext(SlideUpModalContext);
   const { tempUnit, distanceUnit, setTempUnit, setDistanceUnit } = useUnits();
-  const [currentPage, setCurrentPage] = useState<'main' | 'calendar' | 'units' | 'about' | 'debugLog'>('main');
+  const [currentPage, setCurrentPage] = useState<'main' | 'calendar' | 'units' | 'about' | 'dataProviders' | 'debugLog'>('main');
   const [syncState, setSyncState] = useState<SyncState>('idle');
   const [calendars, setCalendars] = useState<DeviceCalendar[]>([]);
   const [calendarsLoaded, setCalendarsLoaded] = useState(false);
@@ -89,7 +89,7 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
   const { width: SCREEN_WIDTH } = Dimensions.get('window');
   const slideX = useSharedValue(0); // 0 = main, 1 = subpage
 
-  const openSubpage = useCallback((page: 'calendar' | 'units' | 'about' | 'debugLog') => {
+  const openSubpage = useCallback((page: 'calendar' | 'units' | 'about' | 'dataProviders' | 'debugLog') => {
     hapticLight();
     setCurrentPage(page);
     slideX.value = withTiming(1, { duration: 300, easing: Easing.out(Easing.cubic) });
@@ -441,7 +441,7 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
       <Text style={styles.sectionHeader}>ABOUT</Text>
       <View style={styles.settingsList}>
         <TouchableOpacity
-          style={[styles.settingsItem, styles.settingsItemLast]}
+          style={styles.settingsItem}
           activeOpacity={0.7}
           onPress={() => openSubpage('about')}
         >
@@ -450,6 +450,19 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
           </View>
           <View style={styles.itemContent}>
             <Text style={styles.itemTitle}>About This App</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={AppColors.secondary} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.settingsItem, styles.settingsItemLast]}
+          activeOpacity={0.7}
+          onPress={() => openSubpage('dataProviders')}
+        >
+          <View style={styles.itemIconContainer}>
+            <Ionicons name="server-outline" size={22} color={AppColors.primary} />
+          </View>
+          <View style={styles.itemContent}>
+            <Text style={styles.itemTitle}>Data Providers</Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color={AppColors.secondary} />
         </TouchableOpacity>
@@ -758,6 +771,56 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
     </>
   );
 
+  const renderDataProvidersPage = () => (
+    <>
+      <View style={{ marginTop: Spacing.lg }}>
+        <Text style={styles.aboutText}>
+          Tracky relies on the following data sources to provide schedule and real-time train information.
+        </Text>
+        <Text style={styles.sectionHeader}>SCHEDULE DATA</Text>
+        <View style={styles.settingsList}>
+          <TouchableOpacity
+            style={[styles.settingsItem, styles.settingsItemLast]}
+            activeOpacity={0.7}
+            onPress={() => {
+              hapticLight();
+              Linking.openURL('https://www.amtrak.com');
+            }}
+          >
+            <View style={styles.itemIconContainer}>
+              <Ionicons name="train-outline" size={22} color={AppColors.primary} />
+            </View>
+            <View style={styles.itemContent}>
+              <Text style={styles.itemTitle}>Amtrak GTFS</Text>
+              <Text style={styles.itemSubtitle}>Routes, stops, trips, and timetables</Text>
+            </View>
+            <Ionicons name="open-outline" size={18} color={AppColors.secondary} />
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.sectionHeader}>REAL-TIME DATA</Text>
+        <View style={styles.settingsList}>
+          <TouchableOpacity
+            style={[styles.settingsItem, styles.settingsItemLast]}
+            activeOpacity={0.7}
+            onPress={() => {
+              hapticLight();
+              Linking.openURL('https://transitdocs.com');
+            }}
+          >
+            <View style={styles.itemIconContainer}>
+              <Ionicons name="pulse-outline" size={22} color={AppColors.primary} />
+            </View>
+            <View style={styles.itemContent}>
+              <Text style={styles.itemTitle}>Transitdocs</Text>
+              <Text style={styles.itemSubtitle}>Live positions, delays, and service alerts</Text>
+            </View>
+            <Ionicons name="open-outline" size={18} color={AppColors.secondary} />
+          </TouchableOpacity>
+        </View>
+      </View>
+    </>
+  );
+
   const renderDebugLogPage = () => (
     <>
       <View style={[styles.pillRow, { marginTop: Spacing.md, flexWrap: 'wrap' }]}>
@@ -832,6 +895,7 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
     calendar: 'Calendar Sync',
     units: 'Units',
     about: 'About This App',
+    dataProviders: 'Data Providers',
     debugLog: 'Debug Log',
   };
 
@@ -925,6 +989,7 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
             {currentPage === 'calendar' && renderCalendarPage()}
             {currentPage === 'units' && renderUnitsPage()}
             {currentPage === 'about' && renderAboutPage()}
+            {currentPage === 'dataProviders' && renderDataProvidersPage()}
             {currentPage === 'debugLog' && renderDebugLogPage()}
           </ScrollView>
         </Animated.View>
