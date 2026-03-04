@@ -225,6 +225,7 @@ function SwipeableTrainCard({ train, onPress, onDelete, isFirst, isLast, content
             routeName={train.routeName || train.operator}
             trainNumber={train.trainNumber}
             date={train.date}
+            daysAway={train.daysAway}
             fromName={train.from}
             toName={train.to}
             fromCode={train.fromCode}

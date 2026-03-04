@@ -18,6 +18,7 @@ interface TrainCardContentProps {
   routeName: string;
   trainNumber: string;
   date?: string;
+  daysAway?: number;
   fromName: string;
   toName: string;
   fromCode: string;
@@ -44,6 +45,7 @@ export default function TrainCardContent({
   routeName,
   trainNumber,
   date,
+  daysAway,
   fromName,
   toName,
   fromCode,
@@ -61,6 +63,7 @@ export default function TrainCardContent({
   arriveDelayedDayOffset,
 }: TrainCardContentProps) {
   const pastColor = isPast ? { color: AppColors.secondary } : undefined;
+  const isToday = daysAway != null && daysAway <= 0;
 
   return (
     <View style={localStyles.row}>
@@ -84,7 +87,21 @@ export default function TrainCardContent({
               {intermediateStopCount} stop{intermediateStopCount !== 1 ? 's' : ''}
             </Text>
           )}
-          {date != null && <Text style={styles.trainDate}>{date}</Text>}
+          {isToday ? (
+            <Text style={[styles.trainDate, {
+              color: isPast
+                ? AppColors.secondary
+                : departDelayMinutes && departDelayMinutes > 0
+                  ? DELAY_COLORS.delayed
+                  : DELAY_COLORS.onTime,
+            }]}>
+              {isPast
+                ? `${countdownValue}${countdownLabel.replace(/ AGO$/, '').slice(0, 1).toLowerCase()} ago`
+                : `In ${countdownValue}${countdownLabel.slice(0, 1).toLowerCase()}`}
+            </Text>
+          ) : date != null ? (
+            <Text style={styles.trainDate}>{date}</Text>
+          ) : null}
         </View>
 
         <Text style={[styles.route, { fontSize: 18 }, pastColor]}>
