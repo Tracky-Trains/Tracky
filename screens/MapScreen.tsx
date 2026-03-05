@@ -27,6 +27,7 @@ import { useRealtime } from '../hooks/useRealtime';
 import { useShapes } from '../hooks/useShapes';
 import { useStations } from '../hooks/useStations';
 import { TrainAPIService } from '../services/api';
+import { requestPermissions as requestNotificationPermissions } from '../services/notifications';
 import { TrainStorageService } from '../services/storage';
 import type { SavedTrainRef, Stop, Train, ViewportBounds } from '../types/train';
 import { ClusteringConfig } from '../utils/clustering-config';
@@ -445,8 +446,9 @@ function MapScreenInner() {
     }
   }, []);
 
-  // Get user location on mount
+  // Request permissions on mount (location + notifications)
   React.useEffect(() => {
+    requestNotificationPermissions();
     (async () => {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
