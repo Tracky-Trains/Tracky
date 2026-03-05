@@ -7,7 +7,7 @@ import { selectNextTrain, selectUpcomingTrains, buildTravelStats } from './widge
 import type { Train } from '../types/train';
 import { parseTimeToDate } from '../utils/time-formatting';
 import { logger } from '../utils/logger';
-import { Platform, NativeModules } from 'react-native';
+import { Platform } from 'react-native';
 
 // Cached prefs — refreshed on startup and when changed
 let cachedPrefs: NotificationPrefs = DEFAULT_NOTIFICATION_PREFS;
@@ -37,9 +37,9 @@ function hasAnyFeatureEnabled(prefs: NotificationPrefs): boolean {
 }
 
 // Lazy-load widget handles — expo-widgets requires native modules.
-// Check NativeModules first to avoid triggering a red error screen in dev.
+// The try/catch handles Expo Go or missing native module gracefully.
 function getWidgetHandles() {
-  if (Platform.OS !== 'ios' || !NativeModules.ExpoWidgets) return null;
+  if (Platform.OS !== 'ios') return null;
   try {
     const { nextTrainWidget } = require('../widgets/NextTrainWidget');
     const { travelStatsWidget } = require('../widgets/TravelStatsWidget');
@@ -102,7 +102,7 @@ export const TrainActivityManager = {
     }
 
     if (prefs.liveActivities && LiveActivityService.isTrainActiveNow(train)) {
-      await LiveActivityService.startForTrain(train);
+      await LiveActivityService.startForTrain(train).catch(e => logger.error('[TrainActivityManager] Failed to start live activity:', e));
     }
   },
 
@@ -172,7 +172,7 @@ export const TrainActivityManager = {
         if (LiveActivityService.hasActivityForTrain(newTrain)) {
           await LiveActivityService.updateForTrain(newTrain);
         } else if (LiveActivityService.isTrainActiveNow(newTrain)) {
-          await LiveActivityService.startForTrain(newTrain);
+          await LiveActivityService.startForTrain(newTrain).catch(e => logger.error('[TrainActivityManager] Failed to start live activity:', e));
         }
       }
 
@@ -209,7 +209,7 @@ export const TrainActivityManager = {
     if (prefs.liveActivities) {
       for (const train of trains) {
         if (LiveActivityService.isTrainActiveNow(train)) {
-          await LiveActivityService.startForTrain(train);
+          await LiveActivityService.startForTrain(train).catch(e => logger.error('[TrainActivityManager] Failed to start live activity:', e));
         }
       }
     }
@@ -245,7 +245,7 @@ export const TrainActivityManager = {
     if (prefs.liveActivities) {
       for (const train of trains) {
         if (LiveActivityService.isTrainActiveNow(train) && !LiveActivityService.hasActivityForTrain(train)) {
-          await LiveActivityService.startForTrain(train);
+          await LiveActivityService.startForTrain(train).catch(e => logger.error('[TrainActivityManager] Failed to start live activity:', e));
         }
       }
     } else {

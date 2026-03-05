@@ -2,12 +2,12 @@ import * as BackgroundFetch from 'expo-background-fetch';
 import * as TaskManager from 'expo-task-manager';
 import type { Train } from '../types/train';
 import { logger } from '../utils/logger';
-import { Platform, NativeModules } from 'react-native';
+import { Platform } from 'react-native';
 
 // Lazy-load widget handles — expo-widgets requires native modules.
-// Check NativeModules first to avoid triggering a red error screen in dev.
+// The try/catch handles Expo Go or missing native module gracefully.
 function getWidgetHandles() {
-  if (Platform.OS !== 'ios' || !NativeModules.ExpoWidgets) return null;
+  if (Platform.OS !== 'ios') return null;
   try {
     const { nextTrainWidget } = require('../widgets/NextTrainWidget');
     const { travelStatsWidget } = require('../widgets/TravelStatsWidget');

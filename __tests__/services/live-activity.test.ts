@@ -6,7 +6,6 @@
 // Mock the dependencies before importing the module
 jest.mock('react-native', () => ({
   Platform: { OS: 'ios', Version: '17.0' },
-  NativeModules: { ExpoWidgets: {} },
 }));
 
 jest.mock('expo-widgets', () => {

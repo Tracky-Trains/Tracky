@@ -450,7 +450,7 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
             Alert.alert('Not Supported', 'Live Activities require iOS 16.2+ and a development build (not Expo Go).');
             return;
           }
-          await LiveActivityService.startForTrain({
+          const started = await LiveActivityService.startForTrain({
             tripId: 'test-live-activity',
             trainNumber: '91',
             routeName: 'Northeast Regional',
@@ -463,10 +463,15 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
             daysAway: 0,
             realtime: { delay: 12 },
           });
-          logger.info('[Debug] Started test Live Activity');
-          Alert.alert('Live Activity Started', 'Test activity started successfully.');
+          if (started) {
+            logger.info('[Debug] Started test Live Activity');
+            Alert.alert('Live Activity Started', 'Check the Dynamic Island or Lock Screen.');
+          } else {
+            Alert.alert('Not Available', 'Live Activities native module is not available. Make sure you are running a development build (not Expo Go) and Live Activities are enabled in Settings > Tracky.');
+          }
         } catch (e) {
-          Alert.alert('Error', String(e));
+          logger.error('[Debug] Live Activity start failed:', e);
+          Alert.alert('Failed to Start', `${e instanceof Error ? e.message : String(e)}\n\nMake sure Live Activities are enabled in Settings > Tracky.`);
         }
       } else if (action === 'end') {
         try {

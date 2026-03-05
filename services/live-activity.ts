@@ -1,4 +1,4 @@
-import { NativeModules, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import type { Train } from '../types/train';
 import { parseTimeToDate } from '../utils/time-formatting';
 import { logger } from '../utils/logger';
@@ -11,9 +11,9 @@ export type { TrainActivityProps };
 const activeActivities = new Map<string, any>();
 
 // Lazy-load the live activity handle — expo-widgets requires native modules.
-// Check NativeModules first to avoid triggering a red error screen in dev.
+// The try/catch handles Expo Go or missing native module gracefully.
 function getTrainLiveActivity() {
-  if (Platform.OS !== 'ios' || !NativeModules.ExpoWidgets) return null;
+  if (Platform.OS !== 'ios') return null;
   try {
     return require('../widgets/TrainLiveActivity').trainLiveActivity;
   } catch {
@@ -73,20 +73,29 @@ function buildProps(train: Train): TrainActivityProps {
   };
 }
 
-export async function startForTrain(train: Train): Promise<void> {
-  if (!isSupported()) return;
+export async function startForTrain(train: Train): Promise<boolean> {
+  if (!isSupported()) {
+    logger.warn('[LiveActivity] Not supported on this device/OS version');
+    return false;
+  }
 
   const key = activityKey(train);
-  if (activeActivities.has(key)) return;
+  if (activeActivities.has(key)) return true;
+
+  const liveActivity = getTrainLiveActivity();
+  if (!liveActivity) {
+    logger.warn('[LiveActivity] Native module not available (expo-widgets not linked)');
+    return false;
+  }
 
   try {
-    const liveActivity = getTrainLiveActivity();
-    if (!liveActivity) return;
     const activity = liveActivity.start(buildProps(train));
     activeActivities.set(key, activity);
     logger.info(`[LiveActivity] Started for ${train.trainNumber} (${key})`);
+    return true;
   } catch (e) {
     logger.error(`[LiveActivity] Failed to start for ${train.trainNumber}:`, e);
+    throw e;
   }
 }
 
