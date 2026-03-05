@@ -353,11 +353,6 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
     } catch {}
   }
 
-  const departTz = React.useMemo(() => {
-    if (!trainData) return null;
-    const stop = gtfsParser.getStop(trainData.fromCode);
-    return stop ? getTimezoneForStop(stop) : null;
-  }, [trainData]);
   const countdown = trainData ? getCountdownForTrain(trainData) : null;
   const unitLabel = countdown ? `${countdown.unit}${countdown.past ? ' AGO' : ''}` : '';
 

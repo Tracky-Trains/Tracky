@@ -28,9 +28,10 @@ export class GTFSParser {
     return this._isLoaded;
   }
 
-  /** IANA timezone for GTFS schedule times (from agency.txt agency_timezone). */
-  get agencyTimezone(): string | null {
-    return this._agencyTimezone;
+  /** IANA timezone for GTFS schedule times (from agency.txt agency_timezone).
+   *  Falls back to America/New_York (Amtrak's agency timezone) if not yet loaded. */
+  get agencyTimezone(): string {
+    return this._agencyTimezone || 'America/New_York';
   }
 
   // Override parser data with dynamically fetched cache
