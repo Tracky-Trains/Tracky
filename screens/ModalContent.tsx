@@ -80,7 +80,9 @@ export const ModalContent = React.forwardRef<
         // by shifting the arrival date back by |daysAway| days
         if (t.daysAway < 0 && t.arriveTime) {
           const arriveDate = parseTimeToDate(t.arriveTime, now);
-          // arriveDayOffset is relative to departure day; shift to today's frame
+          // arriveDayOffset is relative to departure day; shift to today's frame.
+          // e.g. departed yesterday (daysAway=-1) arriving +1 day after departure
+          //      → arrivalDayFromToday = 1 + (-1) = 0 → arriving today
           const arrivalDayFromToday = (t.arriveDayOffset ?? 0) + t.daysAway;
           arriveDate.setDate(arriveDate.getDate() + arrivalDayFromToday);
           if (arriveDate.getTime() + POST_ARRIVAL_GRACE_MS < now.getTime()) return true;

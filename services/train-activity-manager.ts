@@ -5,7 +5,7 @@ import * as LiveActivityService from './live-activity';
 import * as NotificationService from './notifications';
 import { selectNextTrain } from './widget-data';
 import type { Train } from '../types/train';
-import { parseTimeToDate } from '../utils/time-formatting';
+import { getAdjustedTrainDates } from '../utils/train-helpers';
 import { logger } from '../utils/logger';
 import { Platform } from 'react-native';
 
@@ -62,15 +62,7 @@ function isArrived(train: Train): boolean {
   // Future trains haven't arrived
   if (train.daysAway > 0) return false;
   const now = new Date();
-  const arriveDate = parseTimeToDate(train.arriveTime, now);
-  // Account for multi-day journeys (e.g., departs today, arrives tomorrow)
-  if (train.arriveDayOffset) {
-    arriveDate.setDate(arriveDate.getDate() + train.arriveDayOffset);
-  }
-  // For overnight trains (daysAway < 0), shift arrival date back
-  if (train.daysAway < 0) {
-    arriveDate.setDate(arriveDate.getDate() + train.daysAway);
-  }
+  const { arriveDate } = getAdjustedTrainDates(train, now);
   const delay = train.realtime?.arrivalDelay ?? train.realtime?.delay ?? 0;
   const adjustedArrival = new Date(arriveDate.getTime() + delay * 60 * 1000);
   return now >= adjustedArrival;

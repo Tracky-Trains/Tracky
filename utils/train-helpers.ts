@@ -4,6 +4,8 @@
  */
 
 import { gtfsParser } from './gtfs-parser';
+import { parseTimeToDate } from './time-formatting';
+import type { Train } from '../types/train';
 
 /**
  * Extract the departure date embedded in a GTFS-RT trip ID.
@@ -40,5 +42,32 @@ export function extractTrainNumber(tripId: string): string {
   // Fallback: Try to extract numeric train number from trip ID
   const match = tripId.match(/\d+/);
   return match ? match[0] : tripId;
+}
+
+/**
+ * Build wall-clock Date objects for a train's departure and arrival,
+ * accounting for multi-day offsets and overnight trains (daysAway < 0).
+ */
+export function getAdjustedTrainDates(
+  train: Pick<Train, 'departTime' | 'arriveTime' | 'departDayOffset' | 'arriveDayOffset' | 'daysAway'>,
+  now = new Date(),
+): { departDate: Date; arriveDate: Date } {
+  const departDate = parseTimeToDate(train.departTime, now);
+  const arriveDate = parseTimeToDate(train.arriveTime, now);
+
+  if (train.departDayOffset) {
+    departDate.setDate(departDate.getDate() + train.departDayOffset);
+  }
+  if (train.arriveDayOffset) {
+    arriveDate.setDate(arriveDate.getDate() + train.arriveDayOffset);
+  }
+
+  // For overnight trains (daysAway < 0), shift both dates back
+  if (train.daysAway < 0) {
+    departDate.setDate(departDate.getDate() + train.daysAway);
+    arriveDate.setDate(arriveDate.getDate() + train.daysAway);
+  }
+
+  return { departDate, arriveDate };
 }
 

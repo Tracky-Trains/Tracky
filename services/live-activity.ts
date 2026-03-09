@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import type { Train } from '../types/train';
-import { parseTimeToDate } from '../utils/time-formatting';
+import { getAdjustedTrainDates } from '../utils/train-helpers';
 import { logger } from '../utils/logger';
 
 // Type-only import — erased at compile time, won't trigger native module loading
@@ -36,22 +36,7 @@ export function isTrainActiveNow(train: Train): boolean {
   if (train.daysAway > 0) return false;
 
   const now = new Date();
-  const departDate = parseTimeToDate(train.departTime, now);
-  const arriveDate = parseTimeToDate(train.arriveTime, now);
-
-  // Account for multi-day journeys
-  if (train.departDayOffset) {
-    departDate.setDate(departDate.getDate() + train.departDayOffset);
-  }
-  if (train.arriveDayOffset) {
-    arriveDate.setDate(arriveDate.getDate() + train.arriveDayOffset);
-  }
-
-  // For overnight trains (daysAway < 0), shift the date window back
-  if (train.daysAway < 0) {
-    departDate.setDate(departDate.getDate() + train.daysAway);
-    arriveDate.setDate(arriveDate.getDate() + train.daysAway);
-  }
+  const { departDate, arriveDate } = getAdjustedTrainDates(train, now);
 
   const delay = train.realtime?.delay ?? 0;
 
@@ -68,15 +53,7 @@ function buildProps(train: Train): TrainActivityProps {
   const status = arrivalDelay > 0 ? 'delayed' : arrivalDelay < 0 ? 'early' : 'on-time';
 
   const now = new Date();
-  const departDate = parseTimeToDate(train.departTime, now);
-  if (train.departDayOffset) departDate.setDate(departDate.getDate() + train.departDayOffset);
-  const arriveDate = parseTimeToDate(train.arriveTime, now);
-  if (train.arriveDayOffset) arriveDate.setDate(arriveDate.getDate() + train.arriveDayOffset);
-  // For overnight trains (daysAway < 0), shift the date window back
-  if (train.daysAway < 0) {
-    departDate.setDate(departDate.getDate() + train.daysAway);
-    arriveDate.setDate(arriveDate.getDate() + train.daysAway);
-  }
+  const { departDate, arriveDate } = getAdjustedTrainDates(train, now);
 
   const minutesUntilDeparture = Math.round((departDate.getTime() + departDelay * 60_000 - now.getTime()) / 60_000);
   const minutesRemaining = Math.max(0, Math.round((arriveDate.getTime() + arrivalDelay * 60_000 - now.getTime()) / 60_000));

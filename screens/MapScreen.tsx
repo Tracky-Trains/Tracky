@@ -208,7 +208,7 @@ function MapScreenInner() {
       const savedTrain = savedTrains.find(
         saved =>
           saved.daysAway <= 0 &&
-          (saved.tripId === train.tripId || saved.trainNumber === train.trainNumber)
+          saved.tripId === train.tripId
       );
       return {
         tripId: train.tripId,
