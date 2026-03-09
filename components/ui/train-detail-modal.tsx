@@ -512,8 +512,10 @@ export default function TrainDetailModal({ train, onClose, onStationSelect, onTr
             const destStop = gtfsParser.getStop(trainData.toCode);
             const destTz = destStop ? getTimezoneForStop(destStop) : gtfsParser.agencyTimezone;
             const nowSec = getCurrentSecondsInTimezone(destTz);
+            const arrivalDelay = trainData.realtime?.arrivalDelay;
             const arriveSec = parseTimeToMinutes(trainData.arriveTime) * 60
-              + (trainData.arriveDayOffset || 0) * 24 * 3600;
+              + (trainData.arriveDayOffset || 0) * 24 * 3600
+              + (arrivalDelay && arrivalDelay > 0 ? arrivalDelay * 60 : 0);
             const adjustedArriveSec = arriveSec + (trainData.daysAway ?? 0) * 86400;
             const isCompleted = countdown.past && adjustedArriveSec - nowSec < 0;
             const arrDeltaSec = Math.abs(adjustedArriveSec - nowSec);

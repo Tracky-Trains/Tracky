@@ -37,11 +37,12 @@ import { convertGtfsTimeForStop, getCurrentSecondsInTimezone } from '../utils/ti
 
 const formatDateForPill = formatDateForDisplay;
 
-function getCountdownFromDeparture(departureTime: string, travelDate: Date): { value: number; unit: string; past: boolean } {
+function getCountdownFromDeparture(departureTime: string, travelDate: Date, delayMinutes?: number): { value: number; unit: string; past: boolean } {
   const [hStr, mStr] = departureTime.split(':');
   const h = parseInt(hStr, 10);
   const m = parseInt(mStr, 10);
-  const departSecOfDay = h * 3600 + m * 60; // handles GTFS h>=24 naturally
+  const departSecOfDay = h * 3600 + m * 60 // handles GTFS h>=24 naturally
+    + (delayMinutes && delayMinutes > 0 ? delayMinutes * 60 : 0);
 
   const tz = gtfsParser.agencyTimezone;
   const now = new Date();
@@ -1102,12 +1103,12 @@ export function TwoStationSearch({ onSelectTrip, onClose }: TwoStationSearchProp
               }).map((trip, index) => {
                 const { displayName, routeName } = getTrainDisplayName(trip.tripId);
                 const isLast = index === tripResults.length - 1;
-                const countdown = getCountdownFromDeparture(trip.fromStop.departure_time, selectedDate);
+                const delays = tripDelays.get(trip.tripId);
+                const depDelay = delays?.departDelay;
+                const countdown = getCountdownFromDeparture(trip.fromStop.departure_time, selectedDate, depDelay);
                 const countdownLabel = countdown.unit;
                 const depart = convertGtfsTimeForStop(trip.fromStop.departure_time, trip.fromStop.stop_id);
                 const arrive = convertGtfsTimeForStop(trip.toStop.arrival_time, trip.toStop.stop_id);
-                const delays = tripDelays.get(trip.tripId);
-                const depDelay = delays?.departDelay;
                 const arrDelay = delays?.arriveDelay;
                 const depDelayed = depDelay && depDelay > 0 ? addDelayToTime(depart.time, depDelay, depart.dayOffset) : undefined;
                 const arrDelayed = arrDelay && arrDelay > 0 ? addDelayToTime(arrive.time, arrDelay, arrive.dayOffset) : undefined;

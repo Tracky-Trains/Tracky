@@ -190,6 +190,8 @@ const DepartureItem = React.memo(function DepartureItem({ train, stationTime, st
   const trainCardStyles = useMemo(() => createTrainCardStyles(colors), [colors]);
   const departStyles = useMemo(() => createDepartureStyles(colors), [colors]);
 
+  const depDelay = train.realtime?.delay;
+
   const countdown = useMemo(() => {
     // Times are in the station's local timezone; compare "now" in same tz
     const stopData = gtfsParser.getStop(stationId);
@@ -207,7 +209,8 @@ const DepartureItem = React.memo(function DepartureItem({ train, stationTime, st
 
     const nowSec = getCurrentSecondsInTimezone(tz);
     const departSec = parseTimeToMinutes(stationTime.time) * 60
-      + (stationTime.dayOffset ?? 0) * 24 * 3600;
+      + (stationTime.dayOffset ?? 0) * 24 * 3600
+      + (depDelay && depDelay > 0 ? depDelay * 60 : 0);
     const deltaSec = departSec + daysAway * 86400 - nowSec;
     const past = deltaSec < 0;
     const absSec = Math.abs(deltaSec);
@@ -220,11 +223,9 @@ const DepartureItem = React.memo(function DepartureItem({ train, stationTime, st
     const seconds = Math.round(absSec);
     if (seconds >= 60) return { value: 1, unit: 'MINUTE', past };
     return { value: seconds, unit: seconds === 1 ? 'SECOND' : 'SECONDS', past };
-  }, [stationTime, selectedDate, stationId]);
+  }, [stationTime, selectedDate, stationId, depDelay]);
 
   const countdownLabel = countdown.unit;
-
-  const depDelay = train.realtime?.delay;
   const arrDelay = train.realtime?.arrivalDelay;
   const depDelayed = depDelay && depDelay > 0 ? addDelayToTime(train.departTime, depDelay, train.departDayOffset) : undefined;
   const arrDelayed = arrDelay && arrDelay > 0 ? addDelayToTime(train.arriveTime, arrDelay, train.arriveDayOffset) : undefined;

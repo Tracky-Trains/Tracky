@@ -22,7 +22,8 @@ export function getCountdownForTrain(train: Train): {
   const fromStop = gtfsParser.getStop(train.fromCode);
   const fromTz = fromStop ? getTimezoneForStop(fromStop) : gtfsParser.agencyTimezone;
   const nowSec = getCurrentSecondsInTimezone(fromTz);
-  const departSec = parseTimeToMinutes(train.departTime) * 60;
+  const departSec = parseTimeToMinutes(train.departTime) * 60
+    + (train.realtime?.delay && train.realtime.delay > 0 ? train.realtime.delay * 60 : 0);
   let deltaSec = departSec - nowSec;
   const past = deltaSec < 0;
   const absSec = Math.abs(deltaSec);
