@@ -1,6 +1,6 @@
 # Tracky
 
-[![Watch the video](https://img.youtube.com/vi/yMouVlQmXSA/hqdefault.jpg)]([https://www.youtube.com/watch?v=yMouVlQmXSA]([https://www.youtube.com/shorts/yMouVlQmXSA](https://www.youtube.com/watch?v=yMouVlQmXSA)))
+[![Watch the video](https://img.youtube.com/vi/yMouVlQmXSA/hqdefault.jpg)](https://www.youtube.com/watch?v=yMouVlQmXSA)
 
 Tracky is a real-time Amtrak train tracker for iOS and Android, built with React Native and Expo. It brings together live GTFS-RT vehicle positions, Amtrak's static schedule data, and destination weather forecasts into a single map-first interface. Every active Amtrak train in the country — Acela, Southwest Chief, Coast Starlight, and the rest — appears as a marker on a full-screen map that updates every 15 seconds. You can save trains you care about, browse station departure boards, search by train number or route name, plan trips between any two stations, and track delays stop-by-stop in real time.
 
