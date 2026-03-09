@@ -23,6 +23,7 @@ The app is designed around a single map screen with a stack of gesture-driven bo
 - Train speed, bearing, and last-updated timestamp
 - Countdown timers showing time until departure for today's trains
 - Automatic archival of completed trips to travel history
+- iOS Live Activity with lock screen and Dynamic Island support for active trains
 
 ### Train Details
 
@@ -113,7 +114,7 @@ npm run validate       # Run all checks (type-check + format + lint + test)
 - **ESLint** with Expo preset
 - **Prettier** (120-char lines, single quotes)
 - **Jest** with React Native Testing Library (40% coverage threshold)
-- **GitHub Actions** CI on every push and pull request
+- Run `npm run validate` before committing to catch all issues
 
 ### Pre-commit
 
@@ -134,7 +135,8 @@ tracky/
 ├── hooks/                  # Custom hooks (live trains, search, etc.)
 ├── services/               # Data fetching, caching, persistence
 ├── utils/                  # Parsers, formatters, clustering
-├── types/                  # TypeScript definitions and Zod schemas
+├── types/                  # TypeScript definitions
+├── widgets/                # iOS Live Activity and widget implementations
 ├── assets/                 # Static assets and cached GTFS data
 └── constants/              # Theme and configuration
 ```
@@ -146,6 +148,7 @@ tracky/
 | `TrainContext`        | Saved trains list, selected train, add/remove/refresh   |
 | `ModalContext`        | Modal navigation stack, snap points, back navigation    |
 | `UnitsContext`        | Temperature and distance unit preferences               |
+| `ThemeContext`        | Dark/light theme management                             |
 | `GTFSRefreshContext`  | GTFS cache status and manual refresh trigger            |
 
 ### Data Flow
@@ -164,15 +167,21 @@ Amtrak GTFS.zip ──► Parse on startup ──► Compressed JSON (7-day cach
 
 ### Services
 
-| Service             | Purpose                                                          |
-| ------------------- | ---------------------------------------------------------------- |
-| `realtime.ts`       | Fetches and parses GTFS-RT protobuf; caches positions and delays |
-| `api.ts`            | High-level API combining schedule + real-time data               |
-| `gtfs-sync.ts`      | Downloads and parses Amtrak GTFS.zip weekly                      |
-| `storage.ts`        | AsyncStorage persistence for saved trains and history            |
-| `shape-loader.ts`   | Lazy-loads route polylines based on map viewport                 |
-| `station-loader.ts` | Lazy-loads station markers based on map viewport                 |
-| `calendar-sync.ts`  | Scans device calendars for Amtrak trips and imports them         |
+| Service                    | Purpose                                                          |
+| -------------------------- | ---------------------------------------------------------------- |
+| `realtime.ts`              | Fetches and parses GTFS-RT protobuf; caches positions and delays |
+| `api.ts`                   | High-level API combining schedule + real-time data               |
+| `gtfs-sync.ts`             | Downloads and parses Amtrak GTFS.zip weekly                      |
+| `storage.ts`               | AsyncStorage persistence for saved trains and history            |
+| `shape-loader.ts`          | Lazy-loads route polylines based on map viewport                 |
+| `station-loader.ts`        | Lazy-loads station markers based on map viewport                 |
+| `calendar-sync.ts`         | Scans device calendars for Amtrak trips and imports them         |
+| `live-activity.ts`         | Manages iOS Live Activities for tracked trains                   |
+| `train-activity-manager.ts`| Coordinates train activity and widget lifecycle                  |
+| `widget-data.ts`           | Prepares data for iOS widgets                                    |
+| `background-tasks.ts`      | Background fetch task management                                 |
+| `notifications.ts`         | Push and local notification handling                             |
+| `location-suggestions.ts`  | Location-based station suggestions                               |
 
 ### Real-Time Data
 
@@ -238,13 +247,15 @@ const train = await TrainAPIService.getTrainDetails('543');
 ### Search Stations
 
 ```typescript
-const stations = await TrainAPIService.searchStations('Boston');
+import { gtfsParser } from './utils/gtfs-parser';
+
+const stations = await gtfsParser.searchStations('Boston');
 ```
 
 ### Find Trips Between Two Stations
 
 ```typescript
-const trips = await TrainAPIService.findTripsWithStops('BOS', 'NYP');
+const trips = await gtfsParser.findTripsWithStops('BOS', 'NYP');
 ```
 
 ### Refresh Real-Time Data for a Saved Train
@@ -256,22 +267,22 @@ const updated = await TrainAPIService.refreshRealtimeData(existingSavedTrain);
 
 ## Tech Stack
 
-- **React Native** 0.81 / **React** 19 / **Expo** 54 with Expo Router
+- **React Native** 0.83 / **React** 19 / **Expo** 55 with Expo Router
 - **TypeScript** 5.9 in strict mode
 - **react-native-maps** for map rendering
-- **react-native-reanimated** 4.1 for animations
+- **react-native-reanimated** 4.2 for animations
 - **react-native-gesture-handler** for swipe and pan gestures
 - **gtfs-realtime-bindings** for protobuf parsing
 - **AsyncStorage** for local persistence
-- **Zod** for runtime data validation
-- **Jest** 30 / **ESLint** 9 / **Prettier** 3.8
+- **expo-widgets** for iOS Live Activity and Dynamic Island
+- **Jest** 29 / **ESLint** 9 / **Prettier** 3.8
 
 ## Contributing
 
 1. Create a feature branch from `main`
 2. Write tests for new features or bug fixes
 3. Run `npm run validate` to pass all checks
-4. Open a pull request — CI will run automatically
+4. Open a pull request
 
 ## License
 
