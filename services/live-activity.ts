@@ -56,13 +56,20 @@ export function isTrainActiveNow(train: Train): boolean {
 }
 
 function buildProps(train: Train): TrainActivityProps {
-  const delay = train.realtime?.delay ?? 0;
-  const status = delay > 0 ? 'delayed' : delay < 0 ? 'early' : 'on-time';
+  const departDelay = train.realtime?.delay ?? 0;
+  const arrivalDelay = train.realtime?.arrivalDelay ?? departDelay;
+  const status = arrivalDelay > 0 ? 'delayed' : arrivalDelay < 0 ? 'early' : 'on-time';
 
   const now = new Date();
+  const departDate = parseTimeToDate(train.departTime, now);
+  if (train.departDayOffset) departDate.setDate(departDate.getDate() + train.departDayOffset);
   const arriveDate = parseTimeToDate(train.arriveTime, now);
   if (train.arriveDayOffset) arriveDate.setDate(arriveDate.getDate() + train.arriveDayOffset);
-  const minutesRemaining = Math.max(0, Math.round((arriveDate.getTime() + delay * 60_000 - now.getTime()) / 60_000));
+
+  const minutesUntilDeparture = Math.round((departDate.getTime() + departDelay * 60_000 - now.getTime()) / 60_000);
+  const minutesRemaining = Math.max(0, Math.round((arriveDate.getTime() + arrivalDelay * 60_000 - now.getTime()) / 60_000));
+  const totalMinutes = Math.max(1, Math.round((arriveDate.getTime() + arrivalDelay * 60_000 - departDate.getTime()) / 60_000));
+  const progressFraction = Math.max(0, Math.min(1, 1 - minutesRemaining / totalMinutes));
 
   return {
     trainNumber: train.trainNumber,
@@ -73,8 +80,11 @@ function buildProps(train: Train): TrainActivityProps {
     to: train.to,
     departTime: train.departTime,
     arriveTime: train.arriveTime,
-    delayMinutes: delay,
+    departDelay,
+    arrivalDelay,
+    minutesUntilDeparture,
     minutesRemaining,
+    progressFraction,
     status,
     lastUpdated: Date.now(),
   };
@@ -100,7 +110,11 @@ export async function startForTrain(train: Train): Promise<boolean> {
     activeActivities.set(key, activity);
     logger.info(`[LiveActivity] Started for ${train.trainNumber} (${key})`);
     return true;
-  } catch (e) {
+  } catch (e: any) {
+    if (e?.code === 'ERR_LIVE_ACTIVITIES_NOT_SUPPORTED') {
+      logger.warn('[LiveActivity] Live Activities not enabled on this device');
+      return false;
+    }
     logger.error(`[LiveActivity] Failed to start for ${train.trainNumber}:`, e);
     throw e;
   }
