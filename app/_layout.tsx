@@ -8,8 +8,11 @@ import { LogBox, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
-// expo-widgets requires a native module that isn't available in Expo Go
-LogBox.ignoreLogs(['Cannot find native module \'ExpoWidgets\'']);
+// expo-widgets / @expo/ui require native modules that aren't available in Expo Go
+LogBox.ignoreLogs([
+  'Cannot find native module \'ExpoWidgets\'',
+  'Cannot find native module \'ExpoUI\'',
+]);
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { ThemeProvider } from '../context/ThemeContext';
 import '../services/background-tasks';

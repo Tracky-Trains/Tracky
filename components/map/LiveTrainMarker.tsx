@@ -5,7 +5,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Text } from 'react-native';
-import { Marker } from 'react-native-maps';
+import { AnimatedRegion, Marker } from 'react-native-maps';
 import { TrainIcon } from '../TrainIcon';
 
 interface LiveTrainMarkerProps {
@@ -33,6 +33,14 @@ export function LiveTrainMarker({
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
 
+  const animatedCoordinate = useRef(new AnimatedRegion({
+    latitude: coordinate.latitude,
+    longitude: coordinate.longitude,
+    latitudeDelta: 0,
+    longitudeDelta: 0,
+  })).current;
+  const isFirstRender = useRef(true);
+
   const [currentLabel, setCurrentLabel] = useState(isCluster ? `${clusterCount}+` : trainNumber);
   const [currentIsCluster, setCurrentIsCluster] = useState(isCluster);
 
@@ -53,6 +61,21 @@ export function LiveTrainMarker({
       }),
     ]).start();
   }, [fadeAnim, scaleAnim]);
+
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    (animatedCoordinate.timing as any)({
+      latitude: coordinate.latitude,
+      longitude: coordinate.longitude,
+      latitudeDelta: 0,
+      longitudeDelta: 0,
+      duration: 1000,
+      useNativeDriver: false,
+    }).start();
+  }, [coordinate.latitude, coordinate.longitude]);
 
   const newLabel = isCluster ? `${clusterCount}+` : trainNumber;
   useEffect(() => {
@@ -92,7 +115,7 @@ export function LiveTrainMarker({
   }, [newLabel, isCluster, currentLabel, currentIsCluster, fadeAnim, scaleAnim]);
 
   return (
-    <Marker coordinate={coordinate} onPress={onPress} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
+    <Marker.Animated coordinate={animatedCoordinate as any} onPress={onPress} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
       <Animated.View
         style={{
           alignItems: 'center',
@@ -127,6 +150,6 @@ export function LiveTrainMarker({
           {currentLabel}
         </Text>
       </Animated.View>
-    </Marker>
+    </Marker.Animated>
   );
 }
