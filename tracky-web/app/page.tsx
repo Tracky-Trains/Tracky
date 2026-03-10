@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /* ================================================================
    HOOKS
@@ -50,10 +50,10 @@ function AnimatedNum({ value, suffix = "", go }: { value: number; suffix?: strin
 function BulletTrain({ reverse = false, revealProgress = 1, tunnelProgress = 0 }: { reverse?: boolean; revealProgress?: number; tunnelProgress?: number }) {
   const headColor = reverse ? "#EF4444" : "#fff";
   const tailColor = reverse ? "#fff" : "#EF4444";
-  const body = "#1a1a1a";
-  const roof = "#2a2a2a";
-  const win = "#555";
-  const coupler = "#5C3A2A";
+  const body = "#e5e5e5";
+  const roof = "#d4d4d4";
+  const win = "#bbb";
+  const coupler = "#ccc";
 
   /* Boxy passenger car */
   const Car = ({ y }: { y: number }) => {
@@ -164,7 +164,7 @@ function Notif({ title, body, time = "now" }: { title: string; body: string; tim
   return (
     <div className="reveal notif w-full max-w-[380px]">
       <div className="flex items-center gap-2 mb-1">
-        <div className="w-5 h-5 rounded-md bg-black/5 flex items-center justify-center text-[10px]">🚂</div>
+        <img src="/tracky-logo.png" alt="" className="w-5 h-5 rounded-md" />
         <span className="text-[11px] text-black/30 font-medium">Tracky</span>
         <span className="text-[11px] text-black/20 ml-auto">{time}</span>
       </div>
@@ -328,14 +328,14 @@ export default function Home() {
     if (notif) {
       const nr = notif.getBoundingClientRect();
       const notifCenter = nr.top + nr.height / 2;
-      const p = Math.max(0, Math.min(1, (vh / 2 - notifCenter) / (vh * 0.8)));
+      const p = Math.max(0, Math.min(1, (vh / 2 - notifCenter + 100) / (vh * 1)));
       setTrainReveal(p);
     }
 
     // Tunnel fade-out: train is fixed at 50vh, track bottom approaches
     // When track section bottom is near 50vh, start fading out
-    const distFromBottom = rect.bottom - vh * 0.5;
-    const tp = Math.max(0, Math.min(1, 1 - distFromBottom / (vh * 0.5)));
+    const distFromBottom = rect.bottom + 250;
+    const tp = Math.max(0, Math.min(1, 1 - distFromBottom / (vh * 1)));
     setTunnelProgress(tp);
   }, []);
 
@@ -369,7 +369,10 @@ export default function Home() {
       {/* ===== FLOATING BUBBLE HEADER ===== */}
       <header className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-xl">
         <div className="flex items-center justify-between px-5 h-12 rounded-full bg-white/70 backdrop-blur-xl border border-black/8 shadow-[0_2px_20px_rgba(0,0,0,0.06)]">
-          <span className="text-sm font-bold tracking-tight">Tracky</span>
+          <div className="flex items-center gap-2">
+            <img src="/tracky-logo.png" alt="Tracky" className="w-7 h-7 rounded-lg" />
+            <span className="text-sm font-bold tracking-tight">Tracky</span>
+          </div>
           <div className="flex items-center gap-3">
             <a href="#" className="hidden sm:inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-black text-white text-xs font-semibold transition-opacity hover:opacity-80">
               Download
@@ -399,12 +402,13 @@ export default function Home() {
           The only app that tells you everything about your train. Live map, real-time
           delays, departure boards, and weather&nbsp;&mdash; so you&apos;re always first to know.
         </p>
-        <div ref={notifRef} className="reveal reveal-d3 mt-12 w-full max-w-md px-4 relative z-[2]">
+        <div ref={notifRef} className="reveal reveal-d3 mt-12 w-full max-w-md px-4 relative z-[11]">
           <div className="relative">
             <div style={{
-              transition: "opacity 0.5s ease, transform 0.5s ease",
-              opacity: hasScrolled ? 0 : 1,
-              transform: hasScrolled ? "translateY(-12px)" : "translateY(0)",
+              transition: "opacity 0.6s ease, transform 0.6s ease",
+              opacity: hasScrolled ? 0.45 : 1,
+              transform: hasScrolled ? "translateY(-18px) scale(0.92)" : "translateY(0) scale(1)",
+              transformOrigin: "top center",
               pointerEvents: hasScrolled ? "none" : "auto",
             }}>
               <Notif title="Acela 2151 — Delayed 12m" body="New departure 6:17 AM from BOS. Late inbound equipment." time="5:48 AM" />
@@ -419,6 +423,7 @@ export default function Home() {
           </div>
         </div>
         {/* Track fading up into the notification */}
+        {/* Track fading up into the notification */}
         <div className="hero-track-leadin">
           <div className="absolute top-0 bottom-0 left-[2px] w-[2px] bg-[#d4d4d4]" />
           <div className="absolute top-0 bottom-0 right-[2px] w-[2px] bg-[#d4d4d4]" />
@@ -430,7 +435,7 @@ export default function Home() {
 
 
       {/* ========== TRACK SECTION ========== */}
-      <section ref={trackRef} className="relative py-16">
+      <section ref={trackRef} className="relative pt-16 pb-0">
         <div className="track-spine hidden md:block"><div className="track-ties" /></div>
         <div className="track-spine-mobile md:hidden"><div className="track-ties" /></div>
 
@@ -751,11 +756,14 @@ export default function Home() {
           }
         />
 
-        {/* ---- TUNNEL AT END OF TRACK ---- */}
-        <div className="relative flex justify-center py-8">
-          <div className="tunnel-end" />
-        </div>
       </section>
+      {/* ---- TUNNEL AT END OF TRACK ---- */}
+      <div className="relative flex justify-center -mt-12" style={{ zIndex: 11 }}>
+        <div className="tunnel-end" style={{
+          transform: `scale(${tunnelProgress > 0.01 ? 1 + 0.3 * Math.exp(-((tunnelProgress * 11) % 1) * 4) : 1})`,
+          transition: "transform 0.1s ease-out",
+        }} />
+      </div>
 
       {/* ========== STATS ========== */}
       <section ref={statsRef} className="py-24 px-6">
@@ -766,8 +774,8 @@ export default function Home() {
             { v: 186, s: " hr", l: "On Rails" },
           ].map((d) => (
             <div key={d.l}>
-              <p className="text-4xl md:text-5xl font-bold"><AnimatedNum value={d.v} suffix={d.s} go={statsGo} /></p>
-              <p className="text-black/25 text-xs uppercase tracking-widest mt-2">{d.l}</p>
+              <p className="text-4xl md:text-5xl font-bold whitespace-nowrap"><AnimatedNum value={d.v} suffix={d.s} go={statsGo} /></p>
+              <p className="text-black/25 text-xs uppercase tracking-widest mt-2 whitespace-nowrap">{d.l}</p>
             </div>
           ))}
         </div>
@@ -794,18 +802,17 @@ export default function Home() {
       </section>
 
       {/* ========== TESTIMONIALS ========== */}
-      <section className="py-24 px-6 max-w-2xl mx-auto text-center">
-        <p className="text-black/15 text-xs font-mono uppercase tracking-[0.25em] mb-10">What riders are saying</p>
-        <div className="space-y-14">
-          <blockquote>
+      <section className="py-24 px-6 max-w-5xl mx-auto">
+        <p className="text-black/15 text-xs font-mono uppercase tracking-[0.25em] mb-10 text-center">What riders are saying</p>
+        <div className="grid md:grid-cols-2 gap-10">
+          <blockquote className="text-center">
             <p className="text-xl md:text-2xl font-medium leading-relaxed text-black/60">
               &ldquo;Tracky told me about a 20-minute delay before the conductor even knew.
               I rerouted through a different station and made my meeting.&rdquo;
             </p>
             <cite className="text-black/25 text-sm mt-4 block not-italic">— Northeast Corridor commuter</cite>
           </blockquote>
-          <div className="h-px bg-black/5 max-w-xs mx-auto" />
-          <blockquote>
+          <blockquote className="text-center">
             <p className="text-xl md:text-2xl font-medium leading-relaxed text-black/60">
               &ldquo;The map alone is worth it. Watching every Amtrak train in the country
               move in real time is genuinely mesmerizing.&rdquo;
@@ -846,7 +853,10 @@ export default function Home() {
         <div className="max-w-5xl mx-auto">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-10 mb-14">
             <div className="col-span-2 md:col-span-1">
-              <p className="logo-enter text-lg font-bold mb-2">Tracky</p>
+              <div className="logo-enter flex items-center gap-2.5 mb-2">
+                <img src="/tracky-logo.png" alt="Tracky" className="w-9 h-9 rounded-xl" />
+                <p className="text-lg font-bold">Tracky</p>
+              </div>
               <p className="text-black/40 text-sm leading-relaxed">Real-time Amtrak tracking for iOS&nbsp;&amp;&nbsp;Android.</p>
             </div>
             <div>

@@ -137,7 +137,7 @@ body {
   background: #3a3a3a;
   border-radius: 18px 18px 4px 4px;
   position: relative;
-  z-index: 2;
+  z-index: 11;
   box-shadow: inset 0 -8px 16px rgba(0,0,0,0.3);
 }
 .tunnel-end::after {
@@ -187,7 +187,7 @@ body {
   position: fixed;
   bottom: 50vh;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translateX(-50%) scale(1.7);
   z-index: 10;
   pointer-events: none;
   filter: drop-shadow(0 2px 8px rgba(0,0,0,0.15));
@@ -196,7 +196,7 @@ body {
 @media (max-width: 768px) {
   .scroll-train {
     left: 27px;
-    transform: none;
+    transform: scale(1.7);
   }
 }
 
