@@ -112,10 +112,13 @@ async function fetchProtobuf(url: string): Promise<Uint8Array> {
 // extractTrainNumber is now imported from utils/train-helpers
 
 /**
- * Parse GTFS-RT protobuf for vehicle positions
+ * Parse GTFS-RT protobuf for vehicle positions.
+ * Returns both the positions map and a tripId→trainNumber mapping so that
+ * parseTripUpdates can index delays by the correct train number.
  */
-function parseVehiclePositions(buffer: Uint8Array): Map<string, RealtimePosition> {
+function parseVehiclePositions(buffer: Uint8Array): { positions: Map<string, RealtimePosition>; trainNumberMap: Map<string, string> } {
   const positions = new Map<string, RealtimePosition>();
+  const trainNumberMap = new Map<string, string>();
 
   try {
     const feed = GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(buffer);
@@ -128,6 +131,8 @@ function parseVehiclePositions(buffer: Uint8Array): Map<string, RealtimePosition
         const trainNumber = vehicleIdMatch
           ? vehicleIdMatch[1]
           : extractTrainNumber(tripId);
+
+        trainNumberMap.set(tripId, trainNumber);
 
         positions.set(tripId, {
           trip_id: tripId,
@@ -152,13 +157,16 @@ function parseVehiclePositions(buffer: Uint8Array): Map<string, RealtimePosition
     logger.error('Error parsing vehicle positions:', error);
   }
 
-  return positions;
+  return { positions, trainNumberMap };
 }
 
 /**
  * Parse GTFS-RT protobuf for trip updates
+ * Accepts an optional tripId→trainNumber map (from vehicle positions) so that
+ * updates for numeric-only GTFS-RT trip IDs can also be indexed by their real
+ * train number (e.g. "656" instead of "248766").
  */
-function parseTripUpdates(buffer: Uint8Array): Map<string, RealtimeUpdate[]> {
+function parseTripUpdates(buffer: Uint8Array, trainNumberMap?: Map<string, string>): Map<string, RealtimeUpdate[]> {
   const updates = new Map<string, RealtimeUpdate[]>();
 
   try {
@@ -167,7 +175,7 @@ function parseTripUpdates(buffer: Uint8Array): Map<string, RealtimeUpdate[]> {
     for (const entity of feed.entity) {
       if (entity.tripUpdate && entity.tripUpdate.trip) {
         const tripId = entity.tripUpdate.trip.tripId || '';
-        const trainNumber = extractTrainNumber(tripId);
+        const trainNumber = trainNumberMap?.get(tripId) || extractTrainNumber(tripId);
         const stopUpdates: RealtimeUpdate[] = [];
 
         for (const stopTime of entity.tripUpdate.stopTimeUpdate || []) {
@@ -239,12 +247,12 @@ export class RealtimeService {
 
       // Fetch fresh data (shared request avoids double-fetch when updates also need data)
       const buffer = await fetchSharedProtobuf();
-      const positions = parseVehiclePositions(buffer);
+      const { positions, trainNumberMap } = parseVehiclePositions(buffer);
       logger.info(`[Realtime] Fetched ${positions.size} vehicle positions`);
 
       // Also populate updates cache from the same buffer to avoid a second fetch
       if (!updatesCache || now - updatesCache.timestamp >= CACHE_TTL) {
-        updatesCache = { data: parseTripUpdates(buffer), timestamp: now };
+        updatesCache = { data: parseTripUpdates(buffer, trainNumberMap), timestamp: now };
       }
 
       // Update cache
@@ -293,11 +301,12 @@ export class RealtimeService {
 
       // Fetch fresh data (shared request avoids double-fetch when positions also need data)
       const buffer = await fetchSharedProtobuf();
-      const updates = parseTripUpdates(buffer);
+      const { positions, trainNumberMap } = parseVehiclePositions(buffer);
+      const updates = parseTripUpdates(buffer, trainNumberMap);
 
       // Also populate positions cache from the same buffer to avoid a second fetch
       if (!positionsCache || now - positionsCache.timestamp >= CACHE_TTL) {
-        positionsCache = { data: parseVehiclePositions(buffer), timestamp: now };
+        positionsCache = { data: positions, timestamp: now };
       }
 
       // Update cache
