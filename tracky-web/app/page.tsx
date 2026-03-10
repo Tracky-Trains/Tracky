@@ -295,6 +295,35 @@ function PairRow({ left, right }: { left: React.ReactNode; right: React.ReactNod
    PAGE
    ================================================================ */
 
+/* ================================================================
+   TYPEWRITER HOOK
+   ================================================================ */
+
+function useTypewriter(text: string, delay: number, speed: number) {
+  const [displayed, setDisplayed] = useState("");
+  const [done, setDone] = useState(false);
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      let i = 0;
+      const iv = setInterval(() => {
+        i++;
+        setDisplayed(text.slice(0, i));
+        if (i >= text.length) {
+          clearInterval(iv);
+          setDone(true);
+        }
+      }, speed);
+      return () => clearInterval(iv);
+    }, delay);
+    return () => clearTimeout(timeout);
+  }, [text, delay, speed]);
+  return { displayed, done };
+}
+
+/* ================================================================
+   PAGE
+   ================================================================ */
+
 export default function Home() {
   const heroRef = useReveal();
   const moreRef = useReveal();
@@ -310,6 +339,30 @@ export default function Home() {
   const [hasScrolled, setHasScrolled] = useState(false);
   const lastScrollY = useRef(0);
   const notifRef = useRef<HTMLDivElement>(null);
+
+  /* ---- Intro sequence stages ---- */
+  const [introStage, setIntroStage] = useState(0);
+  // 0 = nothing, 1 = typewriter started, 2 = desc visible, 3 = notif visible, 4 = track drawing, 5 = header visible
+  const { displayed: titleText, done: titleDone } = useTypewriter("Tracky", 300, 80);
+
+  useEffect(() => {
+    // Stage 1: typewriter starts immediately (via hook delay)
+    setIntroStage(1);
+  }, []);
+
+  useEffect(() => {
+    if (titleDone) {
+      // After typewriter finishes, show description
+      const t1 = setTimeout(() => setIntroStage(2), 200);
+      // Then notification drops in
+      const t2 = setTimeout(() => setIntroStage(3), 900);
+      // Then track draws in
+      const t3 = setTimeout(() => setIntroStage(4), 1600);
+      // Then header slides in
+      const t4 = setTimeout(() => setIntroStage(5), 2800);
+      return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); };
+    }
+  }, [titleDone]);
 
   const handleScroll = useCallback(() => {
     const section = trackRef.current;
@@ -367,7 +420,11 @@ export default function Home() {
     <main className="bg-white min-h-screen">
 
       {/* ===== FLOATING BUBBLE HEADER ===== */}
-      <header className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-xl">
+      <header className="fixed top-4 left-1/2 z-50 w-[92%] max-w-xl" style={{
+        transition: "opacity 0.6s ease, transform 0.6s ease",
+        opacity: introStage >= 5 ? 1 : 0,
+        transform: introStage >= 5 ? "translateX(-50%) translateY(0)" : "translateX(-50%) translateY(-30px)",
+      }}>
         <div className="flex items-center justify-between px-5 h-12 rounded-full bg-white/70 backdrop-blur-xl border border-black/8 shadow-[0_2px_20px_rgba(0,0,0,0.06)]">
           <div className="flex items-center gap-2">
             <img src="/tracky-logo.png" alt="Tracky" className="w-7 h-7 rounded-lg" />
@@ -395,14 +452,28 @@ export default function Home() {
 
       {/* ========== HERO ========== */}
       <section ref={heroRef} className="relative flex flex-col items-center justify-center min-h-screen px-6 text-center">
-        <h1 className="reveal text-5xl md:text-7xl lg:text-[5.5rem] font-bold tracking-tight leading-[1.05] max-w-3xl mb-8" style={{ textWrap: "balance" }}>
-          All Aboard
+        <h1 className="text-5xl md:text-7xl lg:text-[5.5rem] font-bold tracking-tight leading-[1.05] max-w-3xl mb-8" style={{
+          textWrap: "balance",
+          filter: titleDone ? "blur(0px)" : "blur(4px)",
+          transition: "filter 0.6s ease",
+        }}>
+          {titleText}
         </h1>
-        <p className="reveal reveal-d2 text-black/45 text-lg md:text-xl max-w-xl mt-6 leading-relaxed" style={{ textWrap: "balance" }}>
+        <p className="text-black/45 text-lg md:text-xl max-w-xl mt-6 leading-relaxed" style={{
+          textWrap: "balance",
+          transition: "opacity 0.7s ease, transform 0.7s ease, filter 0.7s ease",
+          opacity: introStage >= 2 ? 1 : 0,
+          transform: introStage >= 2 ? "translateY(0)" : "translateY(10px)",
+          filter: introStage >= 2 ? "blur(0px)" : "blur(6px)",
+        }}>
           The only app that tells you everything about your train. Live map, real-time
           delays, departure boards, and weather&nbsp;&mdash; so you&apos;re always first to know.
         </p>
-        <div ref={notifRef} className="reveal reveal-d3 mt-12 w-full max-w-md px-4 relative z-[11]">
+        <div ref={notifRef} className="mt-12 w-full max-w-md px-4 relative z-[11]" style={{
+          transition: "opacity 0.6s ease, transform 0.6s ease",
+          opacity: introStage >= 3 ? 1 : 0,
+          transform: introStage >= 3 ? "translateY(0)" : "translateY(20px)",
+        }}>
           <div className="relative">
             <div style={{
               transition: "opacity 0.6s ease, transform 0.6s ease",
@@ -422,13 +493,31 @@ export default function Home() {
             </div>
           </div>
         </div>
-        {/* Track fading up into the notification */}
-        {/* Track fading up into the notification */}
-        <div className="hero-track-leadin">
-          <div className="absolute top-0 bottom-0 left-[2px] w-[2px] bg-[#d4d4d4]" />
-          <div className="absolute top-0 bottom-0 right-[2px] w-[2px] bg-[#d4d4d4]" />
-          <div className="absolute top-0 bottom-0 left-0 right-0" style={{
-            background: "repeating-linear-gradient(to bottom, transparent 0px, transparent 18px, #e0e0e0 18px, #e0e0e0 20px)",
+        {/* Track fading up into the notification — animated on intro */}
+        <div className="hero-track-leadin" style={{
+          opacity: introStage >= 4 ? 1 : 0,
+        }}>
+          {/* Ties — draw in left-to-right, staggered top to bottom */}
+          <div className="absolute top-0 bottom-0 left-0 right-0 overflow-hidden">
+            {Array.from({ length: 18 }, (_, i) => (
+              <div key={i} className="absolute left-0 right-0 h-[2px]" style={{
+                top: `${18 + i * 20}px`,
+                background: "#e0e0e0",
+                transition: `opacity 0.3s ease ${i * 40}ms, transform 0.4s cubic-bezier(0.16, 1, 0.3, 1) ${i * 40}ms`,
+                opacity: introStage >= 4 ? 1 : 0,
+                transform: introStage >= 4 ? "scaleX(1)" : "scaleX(0)",
+                transformOrigin: "left center",
+              }} />
+            ))}
+          </div>
+          {/* Rails — slide in top to bottom after ties */}
+          <div className="absolute top-0 bottom-0 left-[2px] w-[2px] bg-[#d4d4d4]" style={{
+            transition: "clip-path 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.6s",
+            clipPath: introStage >= 4 ? "inset(0 0 0 0)" : "inset(0 0 100% 0)",
+          }} />
+          <div className="absolute top-0 bottom-0 right-[2px] w-[2px] bg-[#d4d4d4]" style={{
+            transition: "clip-path 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.7s",
+            clipPath: introStage >= 4 ? "inset(0 0 0 0)" : "inset(0 0 100% 0)",
           }} />
         </div>
       </section>
@@ -764,17 +853,19 @@ export default function Home() {
           transition: "transform 0.1s ease-out",
         }} />
       </div>
+      {/* White cover to hide train overshooting past tunnel */}
+      <div className="relative bg-white" style={{ zIndex: 11 }}>
 
       {/* ========== STATS ========== */}
       <section ref={statsRef} className="py-24 px-6">
         <div className="max-w-3xl mx-auto grid grid-cols-3 gap-8 text-center">
           {[
-            { v: 47, s: "", l: "Trips" },
-            { v: 12849, s: " mi", l: "Distance" },
-            { v: 186, s: " hr", l: "On Rails" },
+            { v: tunnelProgress > 0.3 ? 47 : 46, s: "", l: "Trips" },
+            { v: 12849 + Math.round(tunnelProgress * 457), s: " mi", l: "Distance" },
+            { v: 186 + Math.round(tunnelProgress * 7), s: " hr", l: "On Rails" },
           ].map((d) => (
             <div key={d.l}>
-              <p className="text-4xl md:text-5xl font-bold whitespace-nowrap"><AnimatedNum value={d.v} suffix={d.s} go={statsGo} /></p>
+              <p className="text-4xl md:text-5xl font-bold whitespace-nowrap"><span className="font-mono tabular-nums">{d.v.toLocaleString()}{d.s}</span></p>
               <p className="text-black/25 text-xs uppercase tracking-widest mt-2 whitespace-nowrap">{d.l}</p>
             </div>
           ))}
@@ -798,27 +889,6 @@ export default function Home() {
               <p className="text-black/40 text-sm leading-relaxed">{f.d}</p>
             </div>
           ))}
-        </div>
-      </section>
-
-      {/* ========== TESTIMONIALS ========== */}
-      <section className="py-24 px-6 max-w-5xl mx-auto">
-        <p className="text-black/15 text-xs font-mono uppercase tracking-[0.25em] mb-10 text-center">What riders are saying</p>
-        <div className="grid md:grid-cols-2 gap-10">
-          <blockquote className="text-center">
-            <p className="text-xl md:text-2xl font-medium leading-relaxed text-black/60">
-              &ldquo;Tracky told me about a 20-minute delay before the conductor even knew.
-              I rerouted through a different station and made my meeting.&rdquo;
-            </p>
-            <cite className="text-black/25 text-sm mt-4 block not-italic">— Northeast Corridor commuter</cite>
-          </blockquote>
-          <blockquote className="text-center">
-            <p className="text-xl md:text-2xl font-medium leading-relaxed text-black/60">
-              &ldquo;The map alone is worth it. Watching every Amtrak train in the country
-              move in real time is genuinely mesmerizing.&rdquo;
-            </p>
-            <cite className="text-black/25 text-sm mt-4 block not-italic">— Long-distance rail enthusiast</cite>
-          </blockquote>
         </div>
       </section>
 
@@ -901,6 +971,7 @@ export default function Home() {
           </div>
         </div>
       </footer>
+      </div>{/* close white cover */}
     </main>
   );
 }

@@ -64,12 +64,13 @@ body {
   );
 }
 
-/* ===== MOBILE TRACK (left-aligned) ===== */
+/* ===== MOBILE TRACK (centered) ===== */
 
 .track-spine-mobile {
   position: absolute;
   top: 0; bottom: 0;
-  left: 16px;
+  left: 50%;
+  transform: translateX(-50%);
   width: 22px;
   z-index: 1;
   pointer-events: none;
@@ -89,6 +90,7 @@ body {
 
 .track-row {
   position: relative;
+  z-index: 11;
   display: grid;
   grid-template-columns: 1fr 22px 1fr;
   gap: 0;
@@ -114,18 +116,21 @@ body {
 
 @media (max-width: 768px) {
   .track-row {
-    grid-template-columns: 44px 1fr;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: auto;
   }
   .track-left {
-    grid-column: 2;
     padding: 24px 16px;
-    justify-content: flex-start;
+    justify-content: center;
   }
-  /* Left-align everything on mobile */
-  .track-left > * { text-align: left; }
+  .track-left > * { text-align: center; }
   .track-right {
     padding: 24px 16px;
+    justify-content: center;
   }
+  .track-right > * { text-align: center; }
   .track-spine { display: none; }
 }
 
@@ -154,8 +159,7 @@ body {
 
 @media (max-width: 768px) {
   .tunnel-end {
-    position: absolute;
-    left: 16px;
+    position: relative;
   }
 }
 
@@ -176,8 +180,8 @@ body {
 
 @media (max-width: 768px) {
   .hero-track-leadin {
-    left: 27px;
-    transform: none;
+    left: 50%;
+    transform: translateX(-50%);
   }
 }
 
@@ -195,8 +199,8 @@ body {
 
 @media (max-width: 768px) {
   .scroll-train {
-    left: 27px;
-    transform: scale(1.7);
+    left: 50%;
+    transform: translateX(-50%) scale(1.7);
   }
 }
 
@@ -297,6 +301,11 @@ body {
 @keyframes pulse-soft {
   0%, 100% { opacity: 0.5; }
   50% { opacity: 1; }
+}
+
+@keyframes blink-caret {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }
 
 /* ===== FOOTER LOGO ENTRANCE ===== */
