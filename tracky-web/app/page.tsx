@@ -502,7 +502,7 @@ export default function Home() {
             {Array.from({ length: 18 }, (_, i) => (
               <div key={i} className="absolute left-0 right-0 h-[2px]" style={{
                 top: `${18 + i * 20}px`,
-                background: "#e0e0e0",
+                background: "#c4917a",
                 transition: `opacity 0.3s ease ${i * 40}ms, transform 0.4s cubic-bezier(0.16, 1, 0.3, 1) ${i * 40}ms`,
                 opacity: introStage >= 4 ? 1 : 0,
                 transform: introStage >= 4 ? "scaleX(1)" : "scaleX(0)",
