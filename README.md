@@ -85,7 +85,15 @@ npx expo start
 
 Then press `i` for iOS Simulator, `a` for Android Emulator, or scan the QR code with Expo Go on a physical device.
 
-Web is not supported — this app targets iOS and Android only.
+### Landing Page
+
+The `tracky-web/` directory contains a Next.js landing page showcasing Tracky's features through an interactive, scroll-driven journey narrative.
+
+```bash
+cd tracky-web
+npm install
+npm run dev
+```
 
 ## Development
 

@@ -1,0 +1,315 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: #ffffff;
+  --color-foreground: #000000;
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: #fff;
+  color: #000;
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ===== SCROLL REVEAL ===== */
+
+.reveal {
+  opacity: 0;
+  transform: translateY(32px);
+  transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.reveal.visible { opacity: 1; transform: translateY(0); }
+.reveal-d1 { transition-delay: 80ms; }
+.reveal-d2 { transition-delay: 160ms; }
+.reveal-d3 { transition-delay: 240ms; }
+
+/* ===== CENTER TRACK SPINE ===== */
+
+.track-spine {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: 22px;
+  z-index: 1;
+  pointer-events: none;
+}
+.track-spine::before,
+.track-spine::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #d4d4d4;
+}
+.track-spine::before { left: 2px; }
+.track-spine::after  { right: 2px; }
+
+.track-ties {
+  position: absolute;
+  top: 0; bottom: 0; left: 0; right: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0px, transparent 18px,
+    #e0e0e0 18px, #e0e0e0 20px
+  );
+}
+
+/* ===== MOBILE TRACK (left-aligned) ===== */
+
+.track-spine-mobile {
+  position: absolute;
+  top: 0; bottom: 0;
+  left: 16px;
+  width: 22px;
+  z-index: 1;
+  pointer-events: none;
+}
+.track-spine-mobile::before,
+.track-spine-mobile::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 2px;
+  background: #d4d4d4;
+}
+.track-spine-mobile::before { left: 2px; }
+.track-spine-mobile::after  { right: 2px; }
+
+/* ===== TRACK ROW GRID ===== */
+
+.track-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 22px 1fr;
+  gap: 0;
+  max-width: 1100px;
+  margin: 0 auto;
+  align-items: center;
+  min-height: 100vh;
+}
+
+.track-left {
+  padding: 40px 40px 40px 24px;
+  display: flex;
+  justify-content: flex-end;
+}
+/* Right-align text content on desktop left side */
+.track-left > * { text-align: right; }
+
+.track-right {
+  padding: 40px 24px 40px 40px;
+  display: flex;
+  justify-content: flex-start;
+}
+
+@media (max-width: 768px) {
+  .track-row {
+    grid-template-columns: 44px 1fr;
+  }
+  .track-left {
+    grid-column: 2;
+    padding: 24px 16px;
+    justify-content: flex-start;
+  }
+  /* Left-align everything on mobile */
+  .track-left > * { text-align: left; }
+  .track-right {
+    padding: 24px 16px;
+  }
+  .track-spine { display: none; }
+}
+
+/* ===== TUNNEL ===== */
+
+.tunnel-end {
+  width: 36px;
+  height: 48px;
+  background: #3a3a3a;
+  border-radius: 18px 18px 4px 4px;
+  position: relative;
+  z-index: 2;
+  box-shadow: inset 0 -8px 16px rgba(0,0,0,0.3);
+}
+.tunnel-end::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 22px;
+  height: 38px;
+  background: #1a1a1a;
+  border-radius: 11px 11px 2px 2px;
+}
+
+@media (max-width: 768px) {
+  .tunnel-end {
+    position: absolute;
+    left: 16px;
+  }
+}
+
+/* ===== HERO TRACK LEAD-IN ===== */
+
+.hero-track-leadin {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 22px;
+  height: 35vh;
+  pointer-events: none;
+  z-index: 1;
+  mask-image: linear-gradient(to top, black 40%, transparent 90%);
+  -webkit-mask-image: linear-gradient(to top, black 40%, transparent 90%);
+}
+
+@media (max-width: 768px) {
+  .hero-track-leadin {
+    left: 27px;
+    transform: none;
+  }
+}
+
+/* ===== SCROLL TRAIN (fixed at 50vh) ===== */
+
+.scroll-train {
+  position: fixed;
+  bottom: 50vh;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 8px rgba(0,0,0,0.15));
+}
+
+@media (max-width: 768px) {
+  .scroll-train {
+    left: 27px;
+    transform: none;
+  }
+}
+
+/* ===== APP-STYLE DARK CARDS ===== */
+
+.app-card {
+  background: #18181B;
+  border: 1px solid #2C2C30;
+  border-radius: 20px;
+  padding: 20px;
+  color: #fff;
+}
+
+.app-card-inner {
+  background: #1D1D1F;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+/* ===== NOTIFICATION (light for page) ===== */
+
+.notif {
+  background: #fafafa;
+  border: 1px solid #e5e5e5;
+  border-radius: 14px;
+  padding: 14px 18px;
+}
+
+/* ===== FEATURE CARD ===== */
+
+.feat-card {
+  background: #fafafa;
+  border: 1px solid #ebebeb;
+  border-radius: 16px;
+  padding: 28px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.feat-card:hover {
+  border-color: #ccc;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+}
+
+/* ===== BOARD ===== */
+
+.board-row {
+  display: grid;
+  grid-template-columns: 52px 1fr 76px 76px;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 10px;
+  border-radius: 8px;
+}
+.board-row-alt { background: rgba(255,255,255,0.04); }
+.board-cell {
+  font-family: var(--font-mono), monospace;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
+/* ===== STATUS ===== */
+
+.st-ok   { color: #10B981; }
+.st-warn { color: #F59E0B; }
+.st-late { color: #EF4444; }
+
+/* ===== TICKET ===== */
+
+.ticket {
+  background: #18181B;
+  border: 1px solid #2C2C30;
+  border-radius: 20px;
+  position: relative;
+  overflow: hidden;
+  color: #fff;
+}
+.ticket-hole-l, .ticket-hole-r {
+  position: absolute;
+  width: 20px; height: 20px;
+  background: #fff;
+  border-radius: 50%;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.ticket-hole-l { left: -10px; }
+.ticket-hole-r { right: -10px; }
+
+/* ===== MAP ===== */
+
+.map-frame {
+  background: #18181B;
+  border: 1px solid #2C2C30;
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+/* ===== KEYFRAMES ===== */
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+/* ===== FOOTER LOGO ENTRANCE ===== */
+
+.logo-enter {
+  opacity: 0;
+  transform: translateX(-40px) rotate(-12deg);
+  transition: opacity 1.2s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.logo-enter.visible {
+  opacity: 1;
+  transform: translateX(0) rotate(0);
+}
+
+::-webkit-scrollbar { width: 0; }
