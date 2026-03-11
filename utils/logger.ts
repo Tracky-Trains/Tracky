@@ -112,6 +112,10 @@ class Logger {
    * Make data safe for JSON serialization
    */
   private sanitizeData(data: unknown): unknown {
+    // Extract useful info from Error objects (JSON.stringify(Error) returns '{}')
+    if (data instanceof Error) {
+      return { message: data.message, stack: data.stack, name: data.name };
+    }
     try {
       // Test if it's serializable
       JSON.stringify(data);

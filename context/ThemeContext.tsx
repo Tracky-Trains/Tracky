@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useMemo } from 'react';
-import { useColorScheme } from 'react-native';
+import { Platform, useColorScheme } from 'react-native';
 import { type ColorPalette, DarkColors, LightColors, getCloseButtonStyle } from '../constants/theme';
 
 interface ThemeContextType {
@@ -20,7 +20,8 @@ export const useColors = () => useTheme().colors;
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const scheme = useColorScheme();
-  const isDark = scheme !== 'light';
+  // On Android, always use dark theme (BlurView/transparency doesn't work well in light mode)
+  const isDark = Platform.OS === 'android' || scheme !== 'light';
   const colors = isDark ? DarkColors : LightColors;
 
   const value = useMemo(

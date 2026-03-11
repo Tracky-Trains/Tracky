@@ -76,8 +76,9 @@ export const GTFSRefreshProvider: React.FC<{ children: React.ReactNode; onRefres
         setRefreshStep('');
       }, 1200);
     } catch (error) {
-      logger.error('GTFS refresh failed:', error);
-      setRefreshStep('Schedule update failed');
+      const msg = error instanceof Error ? error.message : String(error);
+      logger.error(`GTFS refresh failed: ${msg}`, error);
+      setRefreshStep(`Schedule update failed: ${msg}`);
       setRefreshFailed(true);
       setTimeout(() => {
         setIsRefreshing(false);
@@ -119,7 +120,8 @@ export const GTFSRefreshProvider: React.FC<{ children: React.ReactNode; onRefres
         runRefresh(false);
       }
     } catch (error) {
-      logger.error('GTFS initialization failed:', error);
+      const msg = error instanceof Error ? error.message : String(error);
+      logger.error(`GTFS initialization failed: ${msg}`, error);
       setIsLoadingCache(false);
       setRefreshStep('');
       SplashScreen.hideAsync();
