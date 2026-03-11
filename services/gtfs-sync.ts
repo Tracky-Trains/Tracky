@@ -8,7 +8,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system';
+import { File, Directory, Paths } from 'expo-file-system';
 import { strFromU8, strToU8, unzipSync, zlibSync, unzlibSync } from 'fflate';
 import type { CalendarDateException, CalendarEntry, Route, Shape, Stop, StopTime, Trip } from '../types/train';
 import { gtfsParser } from '../utils/gtfs-parser';
@@ -18,16 +18,17 @@ import { fetchWithTimeout } from '../utils/fetch-with-timeout';
 
 const GTFS_URL = 'https://content.amtrak.com/content/gtfs/GTFS.zip';
 
-const CACHE_DIR = `${FileSystem.documentDirectory}gtfs-cache/`;
+const cacheDir = new Directory(Paths.document, 'gtfs-cache');
+
 const CACHE_FILES = {
-  routes: `${CACHE_DIR}routes.json.z`,
-  stops: `${CACHE_DIR}stops.json.z`,
-  stopTimes: `${CACHE_DIR}stop_times.json.z`,
-  shapes: `${CACHE_DIR}shapes.json.z`,
-  trips: `${CACHE_DIR}trips.json.z`,
-  calendar: `${CACHE_DIR}calendar.json.z`,
-  calendarDates: `${CACHE_DIR}calendar_dates.json.z`,
-  agencyTimezone: `${CACHE_DIR}agency_timezone.txt`,
+  routes: new File(cacheDir, 'routes.json.z'),
+  stops: new File(cacheDir, 'stops.json.z'),
+  stopTimes: new File(cacheDir, 'stop_times.json.z'),
+  shapes: new File(cacheDir, 'shapes.json.z'),
+  trips: new File(cacheDir, 'trips.json.z'),
+  calendar: new File(cacheDir, 'calendar.json.z'),
+  calendarDates: new File(cacheDir, 'calendar_dates.json.z'),
+  agencyTimezone: new File(cacheDir, 'agency_timezone.txt'),
 };
 
 const STORAGE_KEYS = {
@@ -47,11 +48,14 @@ function isOlderThanDays(dateMs: number, days: number): boolean {
   return now - dateMs > ms;
 }
 
-async function ensureCacheDir() {
-  const info = await FileSystem.getInfoAsync(CACHE_DIR);
-  if (!info.exists) {
-    await FileSystem.makeDirectoryAsync(CACHE_DIR, { intermediates: true });
+function ensureCacheDirSync() {
+  if (!cacheDir.exists) {
+    cacheDir.create({ intermediates: true });
   }
+}
+
+async function ensureCacheDir() {
+  ensureCacheDirSync();
   // One-time migration: remove old AsyncStorage GTFS keys to free space
   try {
     await AsyncStorage.multiRemove(LEGACY_STORAGE_KEYS);
@@ -60,35 +64,21 @@ async function ensureCacheDir() {
   }
 }
 
-/** Convert Uint8Array to base64 string (chunk-safe for large arrays) */
-function uint8ToBase64(bytes: Uint8Array): string {
-  const CHUNK = 0x8000; // 32KB chunks to avoid call stack overflow
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
-  }
-  return btoa(binary);
-}
-
-/** Write JSON data as zlib-compressed base64 file */
-async function writeCompressedJSON(path: string, data: unknown): Promise<void> {
+/** Write JSON data as zlib-compressed file */
+function writeCompressedJSON(file: File, data: unknown): void {
   const json = JSON.stringify(data);
   const compressed = zlibSync(strToU8(json));
-  const base64 = uint8ToBase64(compressed);
-  await FileSystem.writeAsStringAsync(path, base64, { encoding: FileSystem.EncodingType.Base64 });
+  if (file.exists) { file.delete(); }
+  file.create();
+  file.write(compressed);
 }
 
-/** Read zlib-compressed base64 file and parse as JSON */
-async function readCompressedJSON<T>(path: string): Promise<T | null> {
+/** Read zlib-compressed file and parse as JSON */
+function readCompressedJSON<T>(file: File): T | null {
   try {
-    const info = await FileSystem.getInfoAsync(path);
-    if (!info.exists) return null;
-    const base64 = await FileSystem.readAsStringAsync(path, { encoding: FileSystem.EncodingType.Base64 });
-    // Convert base64 to Uint8Array
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    const json = strFromU8(unzlibSync(bytes));
+    if (!file.exists) return null;
+    const compressed = file.bytesSync();
+    const json = strFromU8(unzlibSync(compressed));
     return JSON.parse(json) as T;
   } catch {
     return null;
@@ -294,13 +284,7 @@ export async function ensureFreshGTFS(onProgress?: (update: ProgressUpdate) => v
       const trips = await readCompressedJSON<Trip[]>(CACHE_FILES.trips);
       const calendar = await readCompressedJSON<CalendarEntry[]>(CACHE_FILES.calendar);
       const calendarDates = await readCompressedJSON<CalendarDateException[]>(CACHE_FILES.calendarDates);
-      let agencyTimezone: string | null = null;
-      try {
-        const tzInfo = await FileSystem.getInfoAsync(CACHE_FILES.agencyTimezone);
-        if (tzInfo.exists) {
-          agencyTimezone = await FileSystem.readAsStringAsync(CACHE_FILES.agencyTimezone) || null;
-        }
-      } catch { /* ignore */ }
+      const agencyTimezone = CACHE_FILES.agencyTimezone.exists ? CACHE_FILES.agencyTimezone.textSync() || null : null;
       if (routes && stops && stopTimes) {
         gtfsParser.overrideData(routes, stops, stopTimes, shapes || {}, trips || [], calendar || [], calendarDates || [], agencyTimezone);
         shapeLoader.initialize(shapes || {});
@@ -348,16 +332,17 @@ export async function ensureFreshGTFS(onProgress?: (update: ProgressUpdate) => v
     await report('Persisting cache', 0.9, 'Writing compressed data to device storage');
 
     // Write compressed JSON files to filesystem (no size limits)
-    await Promise.all([
-      writeCompressedJSON(CACHE_FILES.routes, routes),
-      writeCompressedJSON(CACHE_FILES.stops, stops),
-      writeCompressedJSON(CACHE_FILES.stopTimes, stopTimes),
-      writeCompressedJSON(CACHE_FILES.shapes, shapes),
-      writeCompressedJSON(CACHE_FILES.trips, trips),
-      writeCompressedJSON(CACHE_FILES.calendar, calendar),
-      writeCompressedJSON(CACHE_FILES.calendarDates, calendarDates),
-      FileSystem.writeAsStringAsync(CACHE_FILES.agencyTimezone, agencyTimezone || ''),
-    ]);
+    writeCompressedJSON(CACHE_FILES.routes, routes);
+    writeCompressedJSON(CACHE_FILES.stops, stops);
+    writeCompressedJSON(CACHE_FILES.stopTimes, stopTimes);
+    writeCompressedJSON(CACHE_FILES.shapes, shapes);
+    writeCompressedJSON(CACHE_FILES.trips, trips);
+    writeCompressedJSON(CACHE_FILES.calendar, calendar);
+    writeCompressedJSON(CACHE_FILES.calendarDates, calendarDates);
+    const tzFile = CACHE_FILES.agencyTimezone;
+    if (tzFile.exists) { tzFile.delete(); }
+    tzFile.create();
+    tzFile.write(agencyTimezone || '');
     // Store only the timestamp in AsyncStorage (tiny metadata)
     await AsyncStorage.setItem(STORAGE_KEYS.LAST_FETCH, String(Date.now()));
 
@@ -377,12 +362,7 @@ export async function ensureFreshGTFS(onProgress?: (update: ProgressUpdate) => v
 }
 
 export async function hasCachedGTFS(): Promise<boolean> {
-  const [r, s, st] = await Promise.all([
-    FileSystem.getInfoAsync(CACHE_FILES.routes),
-    FileSystem.getInfoAsync(CACHE_FILES.stops),
-    FileSystem.getInfoAsync(CACHE_FILES.stopTimes),
-  ]);
-  return r.exists && s.exists && st.exists;
+  return CACHE_FILES.routes.exists && CACHE_FILES.stops.exists && CACHE_FILES.stopTimes.exists;
 }
 
 export async function isCacheStale(): Promise<boolean> {
@@ -402,7 +382,7 @@ const yieldToUI = () => new Promise<void>(resolve => setTimeout(resolve, 0));
  */
 export async function loadCachedGTFS(): Promise<boolean> {
   try {
-    await ensureCacheDir();
+    ensureCacheDirSync();
 
     const routes = await readCompressedJSON<Route[]>(CACHE_FILES.routes);
     const stops = await readCompressedJSON<Stop[]>(CACHE_FILES.stops);
@@ -425,13 +405,7 @@ export async function loadCachedGTFS(): Promise<boolean> {
     const trips = await readCompressedJSON<Trip[]>(CACHE_FILES.trips);
     const calendar = await readCompressedJSON<CalendarEntry[]>(CACHE_FILES.calendar);
     const calendarDates = await readCompressedJSON<CalendarDateException[]>(CACHE_FILES.calendarDates);
-    let agencyTimezone: string | null = null;
-    try {
-      const tzInfo = await FileSystem.getInfoAsync(CACHE_FILES.agencyTimezone);
-      if (tzInfo.exists) {
-        agencyTimezone = await FileSystem.readAsStringAsync(CACHE_FILES.agencyTimezone) || null;
-      }
-    } catch { /* ignore */ }
+    const agencyTimezone = CACHE_FILES.agencyTimezone.exists ? CACHE_FILES.agencyTimezone.textSync() || null : null;
 
     gtfsParser.overrideData(routes, stops, stopTimes, shapes || {}, trips || [], calendar || [], calendarDates || [], agencyTimezone);
     shapeLoader.initialize(shapes || {});

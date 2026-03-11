@@ -301,17 +301,21 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
           style: 'destructive',
           onPress: async () => {
             logger.info('[Settings] User deleted GTFS data');
-            const keys = [
-              'GTFS_LAST_FETCH',
-              'GTFS_ROUTES_JSON',
-              'GTFS_STOPS_JSON',
-              'GTFS_STOP_TIMES_JSON',
-              'GTFS_SHAPES_JSON',
-              'GTFS_TRIPS_JSON',
-              'GTFS_CALENDAR_JSON',
-              'GTFS_CALENDAR_DATES_JSON',
+            // Remove timestamp from AsyncStorage
+            await AsyncStorage.removeItem('GTFS_LAST_FETCH');
+            // Remove legacy AsyncStorage keys (if any remain)
+            const legacyKeys = [
+              'GTFS_ROUTES_JSON', 'GTFS_STOPS_JSON', 'GTFS_STOP_TIMES_JSON',
+              'GTFS_SHAPES_JSON', 'GTFS_TRIPS_JSON', 'GTFS_CALENDAR_JSON',
+              'GTFS_CALENDAR_DATES_JSON', 'GTFS_AGENCY_TIMEZONE',
             ];
-            await AsyncStorage.multiRemove(keys);
+            await AsyncStorage.multiRemove(legacyKeys).catch(() => {});
+            // Remove filesystem cache directory
+            try {
+              const { Directory, Paths } = require('expo-file-system');
+              const cacheDir = new Directory(Paths.document, 'gtfs-cache');
+              if (cacheDir.exists) cacheDir.delete();
+            } catch { /* ignore */ }
             Alert.alert('Done', 'GTFS data deleted.');
           },
         },
