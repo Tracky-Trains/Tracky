@@ -1,5 +1,5 @@
 import * as Network from 'expo-network';
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, { interpolate, runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -186,7 +186,7 @@ export default function MapSettingsPill({
 
     checkNetwork();
 
-    const interval = setInterval(checkNetwork, 5000);
+    const interval = setInterval(checkNetwork, 30000);
 
     return () => {
       mounted = false;
@@ -206,6 +206,31 @@ export default function MapSettingsPill({
       runOnJS(setIsExpanded)(false);
     });
   };
+
+  const handleRouteToggle = useCallback(() => {
+    hapticLight();
+    setRouteMode(getNextRouteMode(routeMode));
+  }, [routeMode, setRouteMode]);
+
+  const handleStationToggle = useCallback(() => {
+    hapticLight();
+    setStationMode(getNextStationMode(stationMode));
+  }, [stationMode, setStationMode]);
+
+  const handleMapTypeToggle = useCallback(() => {
+    hapticLight();
+    setMapType(mapType === 'standard' ? 'satellite' : 'standard');
+  }, [mapType, setMapType]);
+
+  const handleTrainToggle = useCallback(() => {
+    hapticLight();
+    setTrainMode(getNextTrainMode(trainMode));
+  }, [trainMode, setTrainMode]);
+
+  const handleRecenterPress = useCallback(() => {
+    hapticLight();
+    onRecenter();
+  }, [onRecenter]);
 
   const animatedContainerStyle = useAnimatedStyle(() => {
     return {
@@ -241,7 +266,7 @@ export default function MapSettingsPill({
               <Ionicons name="map-outline" size={24} color={colors.primary} />
             </TouchableOpacity>
             {isConnected ? (
-              <TouchableOpacity style={styles.pillButton} onPress={() => { hapticLight(); onRecenter(); }} activeOpacity={0.7}>
+              <TouchableOpacity style={styles.pillButton} onPress={handleRecenterPress} activeOpacity={0.7}>
                 <MaterialIcons name="my-location" size={22} color={colors.primary} />
               </TouchableOpacity>
             ) : (
@@ -262,7 +287,7 @@ export default function MapSettingsPill({
             {/* Routes */}
             <TouchableOpacity
               style={styles.settingOption}
-              onPress={() => { hapticLight(); setRouteMode(getNextRouteMode(routeMode)); }}
+              onPress={handleRouteToggle}
               activeOpacity={0.7}
             >
               <MaterialIcons name="route" size={20} color={getModeColor(routeMode, colors)} />
@@ -274,7 +299,7 @@ export default function MapSettingsPill({
             {/* Stations */}
             <TouchableOpacity
               style={styles.settingOption}
-              onPress={() => { hapticLight(); setStationMode(getNextStationMode(stationMode)); }}
+              onPress={handleStationToggle}
               activeOpacity={0.7}
             >
               <Ionicons
@@ -295,7 +320,7 @@ export default function MapSettingsPill({
             {/* Map Type */}
             <TouchableOpacity
               style={styles.settingOption}
-              onPress={() => { hapticLight(); setMapType(mapType === 'standard' ? 'satellite' : 'standard'); }}
+              onPress={handleMapTypeToggle}
               activeOpacity={0.7}
             >
               {mapType === 'standard' ? (
@@ -311,7 +336,7 @@ export default function MapSettingsPill({
             {/* Trains */}
             <TouchableOpacity
               style={styles.settingOption}
-              onPress={() => { hapticLight(); setTrainMode(getNextTrainMode(trainMode)); }}
+              onPress={handleTrainToggle}
               activeOpacity={0.7}
             >
               <Ionicons name="train" size={20} color={getModeColor(trainMode, colors)} />

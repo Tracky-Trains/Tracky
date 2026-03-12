@@ -14,7 +14,7 @@ interface AnimatedRouteProps {
   zoomOpacity?: number;
 }
 
-export function AnimatedRoute({ id, coordinates, strokeColor, strokeWidth }: AnimatedRouteProps) {
+export const AnimatedRoute = React.memo(function AnimatedRoute({ id, coordinates, strokeColor, strokeWidth }: AnimatedRouteProps) {
   return (
     <Polyline
       key={id}
@@ -26,4 +26,4 @@ export function AnimatedRoute({ id, coordinates, strokeColor, strokeWidth }: Ani
       geodesic={true}
     />
   );
-}
+});

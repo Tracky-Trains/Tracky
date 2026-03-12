@@ -46,8 +46,8 @@ export interface RealtimeAlert {
 // Transitdocs GTFS-RT endpoint (consolidates vehicle positions and trip updates)
 const TRANSITDOCS_GTFS_RT_URL = 'https://asm-backend.transitdocs.com/gtfs/amtrak';
 
-// Cache for real-time data (15 seconds TTL for more frequent updates)
-const CACHE_TTL = 15000;
+// Cache for real-time data (25 seconds TTL — outlasts 15s poll interval so second consumers get cache hits)
+const CACHE_TTL = 25000;
 let positionsCache: { data: Map<string, RealtimePosition>; timestamp: number } | null = null;
 let updatesCache: { data: Map<string, RealtimeUpdate[]>; timestamp: number } | null = null;
 

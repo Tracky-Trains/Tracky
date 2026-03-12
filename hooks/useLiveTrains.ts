@@ -64,16 +64,10 @@ export function useLiveTrains(intervalMs: number = 15000, enabled: boolean = tru
     }
   }, []);
 
-  // Initial fetch
+  // Initial fetch + periodic refresh (single effect)
   useEffect(() => {
     if (!enabled) return;
     fetchLiveTrains();
-  }, [fetchLiveTrains, enabled]);
-
-  // Periodic refresh
-  useEffect(() => {
-    if (!enabled) return;
-
     const interval = setInterval(fetchLiveTrains, intervalMs);
     return () => clearInterval(interval);
   }, [fetchLiveTrains, intervalMs, enabled]);

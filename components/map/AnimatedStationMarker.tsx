@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Text } from 'react-native';
+import { Animated, StyleSheet, Text } from 'react-native';
 import { Marker } from 'react-native-maps';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 
@@ -15,11 +15,29 @@ interface AnimatedStationMarkerProps {
   cluster: StationCluster;
   showFullName: boolean;
   displayName: string;
-  onPress: () => void;
+  onPress: (cluster: StationCluster) => void;
   color?: string;
 }
 
-export function AnimatedStationMarker({ cluster, showFullName, displayName, onPress, color = '#FFFFFF' }: AnimatedStationMarkerProps) {
+const markerStyles = StyleSheet.create({
+  container: {
+    alignItems: 'center',
+  },
+  clusterLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    marginTop: 0,
+    textAlign: 'center',
+  },
+  stationLabel: {
+    fontSize: 9,
+    fontWeight: '600',
+    marginTop: 0,
+    textAlign: 'center',
+  },
+});
+
+export const AnimatedStationMarker = React.memo(function AnimatedStationMarker({ cluster, showFullName, displayName, onPress, color = '#FFFFFF' }: AnimatedStationMarkerProps) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
   const [currentDisplay, setCurrentDisplay] = useState(displayName);
@@ -42,7 +60,7 @@ export function AnimatedStationMarker({ cluster, showFullName, displayName, onPr
     ]).start(() => {
       setTracksChanges(false);
     });
-  }, [fadeAnim, scaleAnim]);
+  }, []);
 
   useEffect(() => {
     if (displayName !== currentDisplay || cluster.isCluster !== currentIsCluster) {
@@ -81,22 +99,28 @@ export function AnimatedStationMarker({ cluster, showFullName, displayName, onPr
         });
       });
     }
-  }, [displayName, cluster.isCluster, currentDisplay, currentIsCluster, fadeAnim, scaleAnim]);
+  }, [displayName, cluster.isCluster, currentDisplay, currentIsCluster]);
+
+  const handlePress = React.useCallback(() => {
+    onPress(cluster);
+  }, [onPress, cluster]);
 
   return (
     <Marker
       key={cluster.id}
       coordinate={{ latitude: cluster.lat, longitude: cluster.lon }}
       anchor={{ x: 0.5, y: 0.5 }}
-      onPress={onPress}
+      onPress={handlePress}
       tracksViewChanges={tracksChanges}
     >
       <Animated.View
-        style={{
-          alignItems: 'center',
-          opacity: fadeAnim,
-          transform: [{ scale: scaleAnim }],
-        }}
+        style={[
+          markerStyles.container,
+          {
+            opacity: fadeAnim,
+            transform: [{ scale: scaleAnim }],
+          },
+        ]}
       >
         <Ionicons
           name="location"
@@ -104,13 +128,10 @@ export function AnimatedStationMarker({ cluster, showFullName, displayName, onPr
           color={color}
         />
         <Text
-          style={{
-            color,
-            fontSize: currentIsCluster ? 10 : 9,
-            fontWeight: '600',
-            marginTop: 0,
-            textAlign: 'center',
-          }}
+          style={[
+            currentIsCluster ? markerStyles.clusterLabel : markerStyles.stationLabel,
+            { color },
+          ]}
           numberOfLines={1}
         >
           {currentDisplay}
@@ -118,4 +139,4 @@ export function AnimatedStationMarker({ cluster, showFullName, displayName, onPr
       </Animated.View>
     </Marker>
   );
-}
+});

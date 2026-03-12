@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { SlideUpModalHandle } from '../components/ui/slide-up-modal';
 import type { Stop, Train } from '../types/train';
 import { logger } from '../utils/logger';
@@ -25,6 +25,9 @@ interface ModalActionsContextType {
   departureBoardRef: React.RefObject<SlideUpModalHandle | null>;
   profileModalRef: React.RefObject<SlideUpModalHandle | null>;
   settingsModalRef: React.RefObject<SlideUpModalHandle | null>;
+
+  // Read current snap imperatively (no re-render)
+  getCurrentSnap: () => 'min' | 'half' | 'max';
 
   // Transition functions
   navigateToTrain: (train: Train, options?: { fromMarker?: boolean; returnTo?: ModalType }) => void;
@@ -112,6 +115,10 @@ export const ModalProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Active modal tracking
   const [activeModal, setActiveModal] = useState<ModalType>('main');
   const [currentSnap, setCurrentSnap] = useState<'min' | 'half' | 'max'>('half');
+  const currentSnapRef = useRef(currentSnap);
+  currentSnapRef.current = currentSnap;
+
+  const getCurrentSnap = useCallback(() => currentSnapRef.current, []);
 
   // Modal data
   const [modalData, setModalData] = useState<{
@@ -127,6 +134,9 @@ export const ModalProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // For same-modal transitions (e.g. train→train), need sequential dismiss→slideIn
   const pendingSameModalRef = useRef<{ snap: 'min' | 'half' | 'max' } | null>(null);
+
+  // Pending slideIn — stored here, fired by useLayoutEffect AFTER React commits content
+  const pendingSlideInRef = useRef<{ type: ModalType; snap: 'min' | 'half' | 'max' } | null>(null);
 
   // Refs for state accessed inside stable callbacks — avoids recreating
   // navigateToTrain / navigateToStation on every modalData or activeModal change
@@ -200,12 +210,9 @@ export const ModalProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         pendingSameModalRef.current = { snap: targetSnap };
         detailModalRef.current?.dismiss?.(true);
       } else {
-        // Different modal: dismiss old + slide in new simultaneously
+        // Different modal: dismiss old, slideIn fires from useLayoutEffect after content commits
         getModalRef(currentActive).current?.dismiss?.(true);
-        // Delay slideIn by a frame so TrainDetailModal content renders before the modal animates up
-        requestAnimationFrame(() => {
-          detailModalRef.current?.slideIn?.(targetSnap);
-        });
+        pendingSlideInRef.current = { type: 'trainDetail', snap: targetSnap };
       }
     },
     [getModalRef]
@@ -235,11 +242,9 @@ export const ModalProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         pendingSameModalRef.current = { snap: 'half' };
         departureBoardRef.current?.dismiss?.(true);
       } else {
-        // Different modal: dismiss old + slide in new simultaneously
+        // Different modal: dismiss old, slideIn fires from useLayoutEffect after content commits
         getModalRef(currentActive).current?.dismiss?.(true);
-        requestAnimationFrame(() => {
-          departureBoardRef.current?.slideIn?.('half');
-        });
+        pendingSlideInRef.current = { type: 'departureBoard', snap: 'half' };
       }
     },
     [getModalRef]
@@ -355,6 +360,15 @@ export const ModalProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     else if (type === 'settings') setShowSettingsContent(false);
   }, [getModalRef]);
 
+  // Fire pending slideIn AFTER React has committed the content to the view tree.
+  // useLayoutEffect runs synchronously after commit — content is guaranteed to be rendered.
+  useLayoutEffect(() => {
+    const pending = pendingSlideInRef.current;
+    if (!pending) return;
+    pendingSlideInRef.current = null;
+    getModalRef(pending.type).current?.slideIn?.(pending.snap);
+  }, [showTrainDetailContent, showDepartureBoardContent, getModalRef]);
+
   // ── Actions context value — only changes when callbacks change (essentially never) ──
   const actionsValue = useMemo<ModalActionsContextType>(
     () => ({
@@ -363,6 +377,7 @@ export const ModalProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       departureBoardRef,
       profileModalRef,
       settingsModalRef,
+      getCurrentSnap,
       navigateToTrain,
       navigateToStation,
       navigateToProfile,
@@ -375,6 +390,7 @@ export const ModalProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       getInitialSnap,
     }),
     [
+      getCurrentSnap,
       navigateToTrain,
       navigateToStation,
       navigateToProfile,
@@ -389,6 +405,7 @@ export const ModalProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   );
 
   // ── State context value — changes when modal state changes ──
+  // currentSnap is intentionally excluded — read it imperatively via getCurrentSnap()
   const stateValue = useMemo<ModalStateContextType>(
     () => ({
       activeModal,
@@ -404,7 +421,7 @@ export const ModalProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     [
       activeModal,
       modalData,
-      currentSnap,
+      // currentSnap deliberately omitted — snap changes no longer trigger re-renders of consumers
       showMainContent,
       showTrainDetailContent,
       showDepartureBoardContent,

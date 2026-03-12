@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Text } from 'react-native';
+import { Animated, StyleSheet, Text } from 'react-native';
 import { AnimatedRegion, Marker } from 'react-native-maps';
 import { TrainIcon } from '../TrainIcon';
 
@@ -22,7 +22,40 @@ interface LiveTrainMarkerProps {
   color?: string;
 }
 
-export function LiveTrainMarker({
+const markerStyles = StyleSheet.create({
+  container: {
+    alignItems: 'center',
+    padding: 10,
+  },
+  clusterLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    marginTop: 0,
+    textAlign: 'center',
+  },
+  trainLabel: {
+    fontSize: 9,
+    fontWeight: '600',
+    marginTop: 0,
+    textAlign: 'center',
+  },
+});
+
+function arePropsEqual(prev: LiveTrainMarkerProps, next: LiveTrainMarkerProps): boolean {
+  return (
+    prev.trainNumber === next.trainNumber &&
+    prev.routeName === next.routeName &&
+    prev.coordinate.latitude === next.coordinate.latitude &&
+    prev.coordinate.longitude === next.coordinate.longitude &&
+    prev.isSaved === next.isSaved &&
+    prev.isCluster === next.isCluster &&
+    prev.clusterCount === next.clusterCount &&
+    prev.onPress === next.onPress &&
+    prev.color === next.color
+  );
+}
+
+export const LiveTrainMarker = React.memo(function LiveTrainMarker({
   trainNumber,
   routeName,
   coordinate,
@@ -65,7 +98,7 @@ export function LiveTrainMarker({
     ]).start(() => {
       setTracksChanges(false);
     });
-  }, [fadeAnim, scaleAnim]);
+  }, []);
 
   useEffect(() => {
     if (isFirstRender.current) {
@@ -120,17 +153,18 @@ export function LiveTrainMarker({
         });
       });
     }
-  }, [newLabel, isCluster, currentLabel, currentIsCluster, fadeAnim, scaleAnim]);
+  }, [newLabel, isCluster, currentLabel, currentIsCluster]);
 
   return (
     <Marker.Animated coordinate={animatedCoordinate as any} onPress={onPress} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={tracksChanges}>
       <Animated.View
-        style={{
-          alignItems: 'center',
-          opacity: fadeAnim,
-          transform: [{ scale: scaleAnim }],
-          padding: 10,
-        }}
+        style={[
+          markerStyles.container,
+          {
+            opacity: fadeAnim,
+            transform: [{ scale: scaleAnim }],
+          },
+        ]}
       >
         <TrainIcon
           name={routeName}
@@ -138,13 +172,10 @@ export function LiveTrainMarker({
           color={iconColor}
         />
         <Text
-          style={{
-            color: iconColor,
-            fontSize: currentIsCluster ? 10 : 9,
-            fontWeight: '600',
-            marginTop: 0,
-            textAlign: 'center',
-          }}
+          style={[
+            currentIsCluster ? markerStyles.clusterLabel : markerStyles.trainLabel,
+            { color: iconColor },
+          ]}
           numberOfLines={1}
         >
           {currentLabel}
@@ -152,4 +183,4 @@ export function LiveTrainMarker({
       </Animated.View>
     </Marker.Animated>
   );
-}
+}, arePropsEqual);

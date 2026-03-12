@@ -167,6 +167,7 @@ function MapScreenInner() {
     departureBoardRef,
     profileModalRef,
     settingsModalRef,
+    getCurrentSnap,
     navigateToTrain,
     navigateToStation,
     navigateToProfile,
@@ -185,7 +186,6 @@ function MapScreenInner() {
     showProfileContent,
     showSettingsContent,
     modalData,
-    currentSnap,
   } = useModalState();
   const isProfileActive = activeModal === 'profile';
 
@@ -416,7 +416,7 @@ function MapScreenInner() {
   const handleLiveTrainMarkerPress = useCallback(
     (tripId: string, trainNumber: string, lat: number, lon: number, routeName?: string) => {
       hapticLight();
-      // Snap map instantly so modal + content appear without delay
+      // Quick map zoom — fast enough to feel instant, smooth enough to not jolt
       const latitudeDelta = 0.05;
       const latitudeOffset = getLatitudeOffsetForModal(latitudeDelta, 'half');
       mapRef.current?.animateToRegion(
@@ -426,7 +426,7 @@ function MapScreenInner() {
           latitudeDelta,
           longitudeDelta: 0.05,
         },
-        0
+        500
       );
 
       // Create placeholder train with available data — modal opens instantly with skeleton
@@ -505,7 +505,7 @@ function MapScreenInner() {
         stop_lon: stationData.lon,
       };
 
-      // Snap map instantly so modal + skeleton appear without delay
+      // Quick map zoom
       const latitudeDelta = 0.05;
       const latitudeOffset = getLatitudeOffsetForModal(latitudeDelta, 'half');
       mapRef.current?.animateToRegion(
@@ -515,13 +515,43 @@ function MapScreenInner() {
           latitudeDelta,
           longitudeDelta: 0.05,
         },
-        0
+        500
       );
 
       navigateToStation(stop);
     },
     [navigateToStation]
   );
+
+  // Stable callback for station marker presses — receives cluster from child
+  const handleStationMarkerPress = useCallback((cluster: {
+    id: string;
+    lat: number;
+    lon: number;
+    isCluster: boolean;
+    stations: Array<{ id: string; name: string; lat: number; lon: number }>;
+  }) => {
+    handleStationPress(cluster);
+  }, [handleStationPress]);
+
+  // Stable callback for saved train cluster presses
+  const handleSavedTrainClusterPress = useCallback((cluster: any) => {
+    if (!cluster.isCluster && cluster.trains[0]?.originalTrain) {
+      handleTrainMarkerPress(cluster.trains[0].originalTrain, cluster.lat, cluster.lon);
+    }
+  }, [handleTrainMarkerPress]);
+
+  // Stable callback for live train cluster presses
+  const handleLiveTrainClusterPress = useCallback((cluster: any) => {
+    if (!cluster.isCluster && cluster.trains[0]) {
+      const trainData = cluster.trains[0];
+      if (trainData.savedTrain && trainData.savedTrain.realtime?.position) {
+        handleTrainMarkerPress(trainData.savedTrain, cluster.lat, cluster.lon);
+      } else {
+        handleLiveTrainMarkerPress(trainData.tripId, trainData.trainNumber, cluster.lat, cluster.lon, trainData.routeName || undefined);
+      }
+    }
+  }, [handleTrainMarkerPress, handleLiveTrainMarkerPress]);
 
   // Handle train selection from departure board
   // If train has a live position, zoom to it and open at half; otherwise open full
@@ -739,7 +769,7 @@ function MapScreenInner() {
         bounds: regionToViewportBounds(newRegion),
         latDelta: newRegion.latitudeDelta,
       });
-    }, 100);
+    }, 200);
   }, []);
 
   // Initialize viewport bounds when map first becomes ready
@@ -774,7 +804,7 @@ function MapScreenInner() {
         });
       }
       const latitudeDelta = 0.05;
-      const latitudeOffset = getLatitudeOffsetForModal(latitudeDelta, currentSnap);
+      const latitudeOffset = getLatitudeOffsetForModal(latitudeDelta, getCurrentSnap());
       mapRef.current?.animateToRegion(
         {
           latitude: location.coords.latitude - latitudeOffset,
@@ -787,7 +817,7 @@ function MapScreenInner() {
     } catch (error) {
       logger.error('Error getting location:', error);
     }
-  }, [currentSnap]);
+  }, [getCurrentSnap]);
 
   // Calculate dynamic stroke width based on zoom level
   const baseStrokeWidth = useMemo(() => {
@@ -867,22 +897,7 @@ function MapScreenInner() {
                 showFullName={showFullName}
                 displayName={displayName}
                 color={colors.accentBlue}
-                onPress={() => {
-                  // Center map on station with offset for 50% modal (departure board opens at half)
-                  const latitudeDelta = 0.02;
-                  const latitudeOffset = getLatitudeOffsetForModal(latitudeDelta, 'half');
-                  mapRef.current?.animateToRegion(
-                    {
-                      latitude: cluster.lat - latitudeOffset,
-                      longitude: cluster.lon,
-                      latitudeDelta: latitudeDelta,
-                      longitudeDelta: 0.02,
-                    },
-                    500
-                  );
-                  // Show departure board
-                  handleStationPress(cluster);
-                }}
+                onPress={handleStationMarkerPress}
               />
             );
           })}
@@ -903,11 +918,7 @@ function MapScreenInner() {
               isCluster={cluster.isCluster}
               clusterCount={cluster.trains.length}
               color={colors.accentBlue}
-              onPress={() => {
-                if (!cluster.isCluster && cluster.trains[0]?.originalTrain) {
-                  handleTrainMarkerPress(cluster.trains[0].originalTrain, cluster.lat, cluster.lon);
-                }
-              }}
+              onPress={() => handleSavedTrainClusterPress(cluster)}
             />
           ))}
 
@@ -927,18 +938,7 @@ function MapScreenInner() {
               isCluster={cluster.isCluster}
               clusterCount={cluster.trains.length}
               color={colors.accentBlue}
-              onPress={() => {
-                if (!cluster.isCluster && cluster.trains[0]) {
-                  const trainData = cluster.trains[0];
-                  // If it's a saved train, use its data directly
-                  if (trainData.savedTrain && trainData.savedTrain.realtime?.position) {
-                    handleTrainMarkerPress(trainData.savedTrain, cluster.lat, cluster.lon);
-                  } else {
-                    // Fetch train details for non-saved trains
-                    handleLiveTrainMarkerPress(trainData.tripId, trainData.trainNumber, cluster.lat, cluster.lon, trainData.routeName || undefined);
-                  }
-                }
-              }}
+              onPress={() => handleLiveTrainClusterPress(cluster)}
             />
           ))}
 
@@ -1017,9 +1017,9 @@ function MapScreenInner() {
         onDismiss={() => handleModalDismissed('trainDetail')}
         onSnapChange={handleSnapChange}
       >
-        {showTrainDetailContent && selectedTrain && (
+        {showTrainDetailContent && (
           <TrainDetailModal
-            train={selectedTrain}
+            train={selectedTrain || modalData.train}
             onClose={handleDetailModalClose}
             onStationSelect={handleStationSelectFromDetail}
             onTrainSelect={handleTrainToTrainNavigation}

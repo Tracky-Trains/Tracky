@@ -281,6 +281,10 @@ export const ModalContent = React.forwardRef<
     />
   ), [handleTrainSelect, handleDeleteTrain, sortedTrains.length, contentOpacity]);
 
+  const contentContainerStyle = useMemo(() => ({
+    paddingBottom: isFullscreen ? 100 : Dimensions.get('window').height * 0.5,
+  }), [isFullscreen]);
+
   const trainListEmpty = useMemo(() => (
     <PlaceholderBlurb
       icon="bookmark-outline"
@@ -350,7 +354,7 @@ export const ModalContent = React.forwardRef<
             renderItem={renderTrainItem}
             ListEmptyComponent={trainListEmpty}
             style={{ flex: 1 }}
-            contentContainerStyle={{ paddingBottom: isFullscreen ? 100 : Dimensions.get('window').height * 0.5 }}
+            contentContainerStyle={contentContainerStyle}
             showsVerticalScrollIndicator={false}
             scrollEnabled={isFullscreen}
             nestedScrollEnabled={true}
