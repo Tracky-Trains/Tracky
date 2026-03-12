@@ -130,11 +130,6 @@ export function LiveTrainMarker({
           name={routeName}
           size={24}
           color={iconColor}
-          style={{
-            textShadowColor: 'rgba(0, 0, 0, 0.8)',
-            textShadowOffset: { width: 0, height: 1 },
-            textShadowRadius: 4,
-          }}
         />
         <Text
           style={{
@@ -143,9 +138,6 @@ export function LiveTrainMarker({
             fontWeight: '600',
             marginTop: 0,
             textAlign: 'center',
-            textShadowColor: 'rgba(0, 0, 0, 0.8)',
-            textShadowOffset: { width: 0, height: 1 },
-            textShadowRadius: 4,
           }}
           numberOfLines={1}
         >

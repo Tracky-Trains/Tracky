@@ -72,7 +72,7 @@ export const LightColors: ColorPalette = {
   secondary: 'rgba(0, 0, 0, 0.5)',
   tertiary: 'rgba(0, 0, 0, 0.2)',
   accent: '#FF6B35',
-  accentBlue: '#2563EB',
+  accentBlue: '#60A5FA',
   success: '#059669',
   error: '#DC2626',
   delayed: '#DC2626',

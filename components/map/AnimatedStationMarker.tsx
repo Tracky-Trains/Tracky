@@ -96,11 +96,6 @@ export function AnimatedStationMarker({ cluster, showFullName, displayName, onPr
           name="location"
           size={24}
           color={color}
-          style={{
-            textShadowColor: 'rgba(0, 0, 0, 0.8)',
-            textShadowOffset: { width: 0, height: 1 },
-            textShadowRadius: 4,
-          }}
         />
         <Text
           style={{
@@ -109,9 +104,6 @@ export function AnimatedStationMarker({ cluster, showFullName, displayName, onPr
             fontWeight: '600',
             marginTop: 0,
             textAlign: 'center',
-            textShadowColor: 'rgba(0, 0, 0, 0.8)',
-            textShadowOffset: { width: 0, height: 1 },
-            textShadowRadius: 4,
           }}
           numberOfLines={1}
         >
