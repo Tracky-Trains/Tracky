@@ -128,6 +128,10 @@ export const ModalProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // For same-modal transitions (e.g. train→train), need sequential dismiss→slideIn
   const pendingSameModalRef = useRef<{ snap: 'min' | 'half' | 'max' } | null>(null);
 
+  // Navigation lock — prevents concurrent transitions from corrupting state
+  const navigationLockRef = useRef(false);
+  const navigationLockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Refs for state accessed inside stable callbacks — avoids recreating
   // navigateToTrain / navigateToStation on every modalData or activeModal change
   const activeModalRef = useRef(activeModal);
@@ -163,6 +167,27 @@ export const ModalProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     else if (type === 'settings') setShowSettingsContent(true);
   }, []);
 
+  // Helper: acquire navigation lock (returns false if already locked)
+  const acquireNavLock = useCallback(() => {
+    if (navigationLockRef.current) return false;
+    navigationLockRef.current = true;
+    // Safety timeout — unlock after 300ms in case handleModalDismissed never fires
+    if (navigationLockTimerRef.current) clearTimeout(navigationLockTimerRef.current);
+    navigationLockTimerRef.current = setTimeout(() => {
+      navigationLockRef.current = false;
+    }, 300);
+    return true;
+  }, []);
+
+  // Helper: release navigation lock
+  const releaseNavLock = useCallback(() => {
+    navigationLockRef.current = false;
+    if (navigationLockTimerRef.current) {
+      clearTimeout(navigationLockTimerRef.current);
+      navigationLockTimerRef.current = null;
+    }
+  }, []);
+
   // Navigate to train detail modal
   const navigateToTrain = useCallback(
     (train: Train, options?: { fromMarker?: boolean; returnTo?: ModalType }) => {
@@ -175,6 +200,12 @@ export const ModalProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (currentActive === 'trainDetail' && currentData.train?.tripId && currentData.train.tripId === train.tripId) {
         return;
       }
+
+      // Prevent concurrent transitions
+      if (!acquireNavLock()) return;
+
+      // Clear any stale pending same-modal transition
+      pendingSameModalRef.current = null;
 
       const targetSnap = fromMarker ? 'half' : 'max';
       nextModalSnapRef.current = targetSnap;
@@ -208,7 +239,7 @@ export const ModalProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         });
       }
     },
-    [getModalRef]
+    [getModalRef, acquireNavLock]
   );
 
   // Navigate to station departure board
@@ -221,6 +252,12 @@ export const ModalProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (currentActive === 'departureBoard' && currentData.station?.stop_id && currentData.station.stop_id === station.stop_id) {
         return;
       }
+
+      // Prevent concurrent transitions
+      if (!acquireNavLock()) return;
+
+      // Clear any stale pending same-modal transition
+      pendingSameModalRef.current = null;
 
       nextModalSnapRef.current = 'half';
 
@@ -242,13 +279,16 @@ export const ModalProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         });
       }
     },
-    [getModalRef]
+    [getModalRef, acquireNavLock]
   );
 
   // Navigate to profile modal
   const navigateToProfile = useCallback(() => {
     const currentActive = activeModalRef.current;
     if (currentActive === 'profile') return;
+    if (!acquireNavLock()) return;
+    pendingSameModalRef.current = null;
+
     logger.info('[Nav] Open profile');
 
     nextModalSnapRef.current = 'half';
@@ -261,12 +301,15 @@ export const ModalProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     getModalRef(currentActive).current?.dismiss?.(true);
     profileModalRef.current?.slideIn?.('half');
-  }, [getModalRef]);
+  }, [getModalRef, acquireNavLock]);
 
   // Navigate to settings modal (full screen)
   const navigateToSettings = useCallback(() => {
     const currentActive = activeModalRef.current;
     if (currentActive === 'settings') return;
+    if (!acquireNavLock()) return;
+    pendingSameModalRef.current = null;
+
     logger.info('[Nav] Open settings');
 
     nextModalSnapRef.current = 'max';
@@ -279,11 +322,14 @@ export const ModalProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     getModalRef(currentActive).current?.dismiss?.(true);
     settingsModalRef.current?.slideIn?.('max');
-  }, [getModalRef]);
+  }, [getModalRef, acquireNavLock]);
 
   // Navigate back to main modal
   const navigateToMain = useCallback(() => {
     const currentActive = activeModalRef.current;
+    if (!acquireNavLock()) return;
+    pendingSameModalRef.current = null;
+
     nextModalSnapRef.current = 'half';
 
     // Clear stack
@@ -296,10 +342,13 @@ export const ModalProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // Simultaneously: dismiss old + slide in new
     getModalRef(currentActive).current?.dismiss?.(true);
     mainModalRef.current?.slideIn?.('half');
-  }, [getModalRef]);
+  }, [getModalRef, acquireNavLock]);
 
   // Go back in the stack
   const goBack = useCallback(() => {
+    if (!acquireNavLock()) return;
+    pendingSameModalRef.current = null;
+
     setModalStack(prev => {
       if (prev.length > 0) {
         const returnTo = prev[prev.length - 1];
@@ -325,12 +374,13 @@ export const ModalProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
         return prev.slice(0, -1);
       } else {
-        // No stack, go to main
+        // No stack, go to main — release lock since navigateToMain will re-acquire
+        releaseNavLock();
         navigateToMain();
         return prev;
       }
     });
-  }, [navigateToMain, getModalRef, showContent]);
+  }, [navigateToMain, getModalRef, showContent, acquireNavLock, releaseNavLock]);
 
   // Dismiss current modal without navigation (just closes it)
   const dismissCurrent = useCallback(() => {
@@ -341,19 +391,26 @@ export const ModalProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const handleModalDismissed = useCallback((type: ModalType) => {
     // Check if this is a same-modal transition (e.g. train→train)
     const pending = pendingSameModalRef.current;
-    if (pending) {
+    if (pending && activeModalRef.current === type) {
       pendingSameModalRef.current = null;
       // Content was already updated, just slide back in with new content
       getModalRef(type).current?.slideIn?.(pending.snap);
+      releaseNavLock();
       return;
     }
+
+    // Clear stale pending if activeModal has moved on
+    pendingSameModalRef.current = null;
+
+    // Release navigation lock
+    releaseNavLock();
 
     // Hide content of the dismissed modal to free resources
     // Main + Profile modals stay mounted to avoid re-initialization flash
     if (type === 'trainDetail') setShowTrainDetailContent(false);
     else if (type === 'departureBoard') setShowDepartureBoardContent(false);
     else if (type === 'settings') setShowSettingsContent(false);
-  }, [getModalRef]);
+  }, [getModalRef, releaseNavLock]);
 
   // ── Actions context value — only changes when callbacks change (essentially never) ──
   const actionsValue = useMemo<ModalActionsContextType>(

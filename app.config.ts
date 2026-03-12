@@ -126,7 +126,7 @@ const config: ExpoConfig = {
       projectId: "00c33d90-9f8b-406e-934e-bf66c9663310",
     },
   },
-  owner: "jxu24",
+  owner: "mootbing",
 };
 
 export default { expo: config };

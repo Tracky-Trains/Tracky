@@ -57,10 +57,11 @@ interface SlideUpModalProps {
   minSnapPercent?: number;
   initialSnap?: 'min' | 'half' | 'max';
   startHidden?: boolean;
+  zIndex?: number;
 }
 
 export default React.forwardRef<SlideUpModalHandle, SlideUpModalProps>(function SlideUpModal(
-  { children, onSnapChange, onHeightChange, onDismiss, minSnapPercent = 0.35, initialSnap = 'half', startHidden = false }: SlideUpModalProps,
+  { children, onSnapChange, onHeightChange, onDismiss, minSnapPercent = 0.35, initialSnap = 'half', startHidden = false, zIndex }: SlideUpModalProps,
   ref: React.Ref<SlideUpModalHandle>
 ) {
   const { colors, isDark } = useTheme();
@@ -137,15 +138,16 @@ export default React.forwardRef<SlideUpModalHandle, SlideUpModalProps>(function 
   }, [SNAP_POINTS, translateY, currentSnap, modalHeight]);
 
   const dismiss = useCallback((fast?: boolean) => {
+    // Fire onDismiss immediately so state cleanup happens even if the animation
+    // is interrupted by a subsequent slideIn on the same shared value.
+    if (onDismissRef.current) {
+      onDismissRef.current();
+    }
+
     if (fast) {
       translateY.value = withTiming(
         SCREEN_HEIGHT,
         { duration: 150, easing: Easing.out(Easing.quad) },
-        finished => {
-          if (finished && onDismissRef.current) {
-            runOnJS(onDismissRef.current)();
-          }
-        }
       );
     } else {
       translateY.value = withSpring(
@@ -154,11 +156,6 @@ export default React.forwardRef<SlideUpModalHandle, SlideUpModalProps>(function 
           damping: 60,
           stiffness: 500,
         },
-        finished => {
-          if (finished && onDismissRef.current) {
-            runOnJS(onDismissRef.current)();
-          }
-        }
       );
     }
   }, [translateY]);
@@ -352,7 +349,7 @@ export default React.forwardRef<SlideUpModalHandle, SlideUpModalProps>(function 
 
   return (
     <GestureDetector gesture={panGesture}>
-      <Animated.View style={[staticStyles.container, animatedStyle]}>
+      <Animated.View style={[staticStyles.container, animatedStyle, zIndex != null && { zIndex }]}>
         <SlideUpModalContext.Provider
           value={useMemo(() => ({
             isFullscreen,
