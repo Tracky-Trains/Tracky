@@ -472,6 +472,14 @@ function MapScreenInner() {
     [setSelectedTrain, navigateToTrain, goBack]
   );
 
+  // Zoom map to fit all given coordinates in the viewport
+  const fitMapToCoordinates = useCallback((coords: { latitude: number; longitude: number }[]) => {
+    mapRef.current?.fitToCoordinates(coords, {
+      edgePadding: { top: 100, right: 60, bottom: 200, left: 60 },
+      animated: true,
+    });
+  }, []);
+
   // Handle station pin press - show departure board
   const handleStationPress = useCallback(
     (cluster: {
@@ -484,15 +492,10 @@ function MapScreenInner() {
       hapticLight();
       // If it's a cluster, just zoom in
       if (cluster.isCluster) {
-        mapRef.current?.animateToRegion(
-          {
-            latitude: cluster.lat,
-            longitude: cluster.lon,
-            latitudeDelta: 0.02,
-            longitudeDelta: 0.02,
-          },
-          500
-        );
+        fitMapToCoordinates(cluster.stations.map((s) => ({
+          latitude: s.lat,
+          longitude: s.lon,
+        })));
         return;
       }
 
@@ -520,7 +523,7 @@ function MapScreenInner() {
 
       navigateToStation(stop);
     },
-    [navigateToStation]
+    [navigateToStation, fitMapToCoordinates]
   );
 
   // Stable callback for station marker presses — receives cluster from child
@@ -537,32 +540,24 @@ function MapScreenInner() {
   // Stable callback for saved train cluster presses
   const handleSavedTrainClusterPress = useCallback((cluster: any) => {
     if (cluster.isCluster) {
-      const coords = cluster.trains.map((t: any) => ({
+      fitMapToCoordinates(cluster.trains.map((t: any) => ({
         latitude: t.position.lat,
         longitude: t.position.lon,
-      }));
-      mapRef.current?.fitToCoordinates(coords, {
-        edgePadding: { top: 100, right: 60, bottom: 200, left: 60 },
-        animated: true,
-      });
+      })));
       return;
     }
     if (cluster.trains[0]?.originalTrain) {
       handleTrainMarkerPress(cluster.trains[0].originalTrain, cluster.lat, cluster.lon);
     }
-  }, [handleTrainMarkerPress]);
+  }, [handleTrainMarkerPress, fitMapToCoordinates]);
 
   // Stable callback for live train cluster presses
   const handleLiveTrainClusterPress = useCallback((cluster: any) => {
     if (cluster.isCluster) {
-      const coords = cluster.trains.map((t: any) => ({
+      fitMapToCoordinates(cluster.trains.map((t: any) => ({
         latitude: t.position.lat,
         longitude: t.position.lon,
-      }));
-      mapRef.current?.fitToCoordinates(coords, {
-        edgePadding: { top: 100, right: 60, bottom: 200, left: 60 },
-        animated: true,
-      });
+      })));
       return;
     }
     if (cluster.trains[0]) {
@@ -573,7 +568,7 @@ function MapScreenInner() {
         handleLiveTrainMarkerPress(trainData.tripId, trainData.trainNumber, cluster.lat, cluster.lon, trainData.routeName || undefined);
       }
     }
-  }, [handleTrainMarkerPress, handleLiveTrainMarkerPress]);
+  }, [handleTrainMarkerPress, handleLiveTrainMarkerPress, fitMapToCoordinates]);
 
   // Handle train selection from departure board
   // If train has a live position, zoom to it and open at half; otherwise open full
