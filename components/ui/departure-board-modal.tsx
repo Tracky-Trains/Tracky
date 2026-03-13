@@ -510,8 +510,9 @@ export default function DepartureBoardModal({
     }, 50);
   }, [filterMode]);
 
-  // Date navigation
+  // Date navigation — set loading immediately so skeleton shows in the same render
   const navigateDate = useCallback((direction: 'prev' | 'next') => {
+    setLoading(true);
     setSelectedDate(prev => {
       const newDate = new Date(prev);
       newDate.setDate(newDate.getDate() + (direction === 'next' ? 1 : -1));
@@ -527,9 +528,10 @@ export default function DepartureBoardModal({
     return selected.getTime() > today.getTime();
   }, [selectedDate]);
 
-  // Handle calendar day press
+  // Handle calendar day press — set loading immediately so skeleton shows in the same render
   const handleDayPress = useCallback((day: DateData) => {
     hapticLight();
+    setLoading(true);
     const [y, m, d] = day.dateString.split('-').map(Number);
     setSelectedDate(new Date(y, m - 1, d));
     setShowDatePicker(false);
