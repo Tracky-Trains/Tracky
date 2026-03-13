@@ -188,19 +188,23 @@ function MapScreenInner() {
     modalData,
   } = useModalState();
   const isProfileActive = activeModal === 'profile';
+  const isSettingsActive = activeModal === 'settings';
+  // Profile and settings both swap the map to show the lightweight past-trips
+  // overlay instead of all live trains, routes, and stations.
+  const isOverlayMode = isProfileActive || isSettingsActive;
 
   // Stagger MapView children swap to avoid Android "addViewAt" crash.
-  // When isProfileActive changes, first remove old children, then after a
+  // When overlay mode changes, first remove old children, then after a
   // frame add new children — prevents simultaneous bulk add/remove.
   const [showNormalMapContent, setShowNormalMapContent] = useState(true);
   const [showProfileMapContent, setShowProfileMapContent] = useState(false);
   useEffect(() => {
     if (Platform.OS !== 'android') {
-      setShowNormalMapContent(!isProfileActive);
-      setShowProfileMapContent(isProfileActive);
+      setShowNormalMapContent(!isOverlayMode);
+      setShowProfileMapContent(isOverlayMode);
       return;
     }
-    if (isProfileActive) {
+    if (isOverlayMode) {
       setShowNormalMapContent(false);
       const timer = setTimeout(() => setShowProfileMapContent(true), 100);
       return () => clearTimeout(timer);
@@ -209,7 +213,7 @@ function MapScreenInner() {
       const timer = setTimeout(() => setShowNormalMapContent(true), 100);
       return () => clearTimeout(timer);
     }
-  }, [isProfileActive]);
+  }, [isOverlayMode]);
 
   // Region is stored as a ref — only the initial value matters for MapView.
   // mapReady gates rendering; subsequent region changes don't need re-renders.
@@ -265,9 +269,9 @@ function MapScreenInner() {
     setTravelStations(Array.from(stationMap.entries()).map(([id, coord]) => ({ ...coord, id })));
   }, []);
 
-  // Load trip history when profile opens
+  // Load trip history when profile or settings opens (both use overlay mode)
   useEffect(() => {
-    if (!isProfileActive) {
+    if (!isOverlayMode) {
       setTravelLines([]);
       setTravelStations([]);
       setProfileYear(null);
@@ -280,7 +284,7 @@ function MapScreenInner() {
       tripHistoryRef.current = history;
       resolveTravelOverlay(history, profileYear);
     })();
-  }, [isProfileActive]);
+  }, [isOverlayMode]);
 
   // Handle year change from profile modal
   const handleProfileYearChange = useCallback((year: number | null) => {
@@ -288,9 +292,9 @@ function MapScreenInner() {
     resolveTravelOverlay(tripHistoryRef.current, year);
   }, [resolveTravelOverlay]);
 
-  // Zoom to fit all travel points when profile opens
+  // Zoom to fit all travel points when overlay mode activates
   useEffect(() => {
-    if (!isProfileActive || travelStations.length === 0) return;
+    if (!isOverlayMode || travelStations.length === 0) return;
 
     const coords = travelStations.map(s => ({ latitude: s.latitude, longitude: s.longitude }));
     const timer = setTimeout(() => {
@@ -301,7 +305,7 @@ function MapScreenInner() {
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [isProfileActive, travelStations]);
+  }, [isOverlayMode, travelStations]);
 
   // Use lazy-loaded stations and shapes based on viewport
   const stations = useStations(viewportBounds ?? undefined);

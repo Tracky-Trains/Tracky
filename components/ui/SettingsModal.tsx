@@ -31,7 +31,6 @@ import * as Notifications from 'expo-notifications';
 import { requestPermissions, getPermissionStatus } from '../../services/notifications';
 import { type NotificationPrefs, DEFAULT_NOTIFICATION_PREFS, TrainStorageService } from '../../services/storage';
 import { TrainActivityManager } from '../../services/train-activity-manager';
-import type { CompletedTrip } from '../../types/train';
 import { useTrainContext } from '../../context/TrainContext';
 import { light as hapticLight, selection as hapticSelection } from '../../utils/haptics';
 import { type LogEntry, LogLevel, logger, openReportBugEmail } from '../../utils/logger';
@@ -96,7 +95,7 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
   const { tempUnit, distanceUnit, setTempUnit, setDistanceUnit } = useUnits();
   const { hapticsEnabled, setHapticsEnabled } = useHaptics();
   const [currentPage, setCurrentPage] = useState<
-    'main' | 'calendar' | 'units' | 'about' | 'dataProviders' | 'debugLog' | 'notifications' | 'haptics' | 'appearance' | 'pastRoutes'
+    'main' | 'calendar' | 'units' | 'about' | 'dataProviders' | 'debugLog' | 'notifications' | 'haptics' | 'appearance'
   >('main');
   const [syncState, setSyncState] = useState<SyncState>('idle');
   const [calendars, setCalendars] = useState<DeviceCalendar[]>([]);
@@ -108,8 +107,6 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
   const [logFilter, setLogFilter] = useState<LogLevel | 'ALL'>('ALL');
   const [forceCrash, setForceCrash] = useState(false);
   const [notifPrefs, setNotifPrefs] = useState<NotificationPrefs>(DEFAULT_NOTIFICATION_PREFS);
-  const [pastRoutes, setPastRoutes] = useState<CompletedTrip[]>([]);
-  const [pastRoutesLoading, setPastRoutesLoading] = useState(false);
   const { savedTrains } = useTrainContext();
   const { debugShowLoadingScreen } = useGTFSRefresh();
 
@@ -117,17 +114,10 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
   const slideX = useSharedValue(0); // 0 = main, 1 = subpage
 
   const openSubpage = useCallback(
-    (page: 'calendar' | 'units' | 'about' | 'dataProviders' | 'debugLog' | 'notifications' | 'haptics' | 'appearance' | 'pastRoutes') => {
+    (page: 'calendar' | 'units' | 'about' | 'dataProviders' | 'debugLog' | 'notifications' | 'haptics' | 'appearance') => {
       hapticLight();
       setCurrentPage(page);
       slideX.value = withTiming(1, { duration: 300, easing: Easing.out(Easing.cubic) });
-      if (page === 'pastRoutes') {
-        setPastRoutesLoading(true);
-        TrainStorageService.getTripHistory().then(history => {
-          setPastRoutes(history);
-          setPastRoutesLoading(false);
-        });
-      }
     },
     []
   );
@@ -715,15 +705,6 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
 
       <Text style={styles.sectionHeader}>DATA</Text>
       <View style={styles.settingsList}>
-        <TouchableOpacity style={styles.settingsItem} activeOpacity={0.7} onPress={() => openSubpage('pastRoutes')}>
-          <View style={styles.itemIconContainer}>
-            <Ionicons name="time-outline" size={22} color={colors.primary} />
-          </View>
-          <View style={styles.itemContent}>
-            <Text style={styles.itemTitle}>Past Routes</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color={colors.secondary} />
-        </TouchableOpacity>
         <TouchableOpacity
           style={styles.settingsItem}
           activeOpacity={0.7}
@@ -1399,90 +1380,6 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
     </>
   );
 
-  const handleDeletePastRoute = useCallback(async (trip: CompletedTrip) => {
-    await TrainStorageService.deleteFromHistory(trip.tripId, trip.fromCode, trip.toCode, trip.travelDate);
-    const updated = await TrainStorageService.getTripHistory();
-    setPastRoutes(updated);
-  }, []);
-
-  const renderPastRoutesPage = () => {
-    if (pastRoutesLoading) {
-      return (
-        <View style={{ paddingVertical: 60, alignItems: 'center' }}>
-          <ActivityIndicator size="small" color={colors.primary} />
-        </View>
-      );
-    }
-
-    if (pastRoutes.length === 0) {
-      return (
-        <PlaceholderBlurb
-          icon="time-outline"
-          title="No past routes yet"
-          subtitle="Completed trips will appear here"
-        />
-      );
-    }
-
-    // Group by month
-    const grouped = new Map<string, CompletedTrip[]>();
-    for (const trip of pastRoutes) {
-      const d = new Date(trip.travelDate);
-      const key = `${d.toLocaleString('en-US', { month: 'long' })} ${d.getFullYear()}`;
-      const list = grouped.get(key) || [];
-      list.push(trip);
-      grouped.set(key, list);
-    }
-
-    return (
-      <>
-        <Text style={[styles.sectionHeader, { marginTop: Spacing.md }]}>
-          {pluralCount(pastRoutes.length, 'TRIP')}
-        </Text>
-        {Array.from(grouped.entries()).map(([month, trips]) => (
-          <View key={month}>
-            <Text style={[styles.sectionHeader, { marginTop: Spacing.lg }]}>{month}</Text>
-            <View style={styles.settingsList}>
-              {trips.map((trip, i) => {
-                const dateStr = new Date(trip.travelDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                return (
-                  <TouchableOpacity
-                    key={`${trip.tripId}-${trip.fromCode}-${trip.toCode}-${trip.travelDate}`}
-                    style={[styles.settingsItem, i === trips.length - 1 && styles.settingsItemLast]}
-                    activeOpacity={0.7}
-                    onLongPress={() => {
-                      hapticLight();
-                      Alert.alert(
-                        'Delete Trip',
-                        `Remove ${trip.from} \u2192 ${trip.to} (${dateStr})?`,
-                        [
-                          { text: 'Cancel', style: 'cancel' },
-                          { text: 'Delete', style: 'destructive', onPress: () => handleDeletePastRoute(trip) },
-                        ]
-                      );
-                    }}
-                  >
-                    <View style={styles.itemIconContainer}>
-                      <Ionicons name="train-outline" size={20} color={colors.primary} />
-                    </View>
-                    <View style={[styles.itemContent, { gap: 2 }]}>
-                      <Text style={styles.itemTitle} numberOfLines={1}>
-                        {trip.from} {'\u2192'} {trip.to}
-                      </Text>
-                      <Text style={styles.itemSubtitle} numberOfLines={1}>
-                        {trip.routeName ? `${trip.routeName} · ` : ''}{trip.trainNumber} · {dateStr}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-        ))}
-      </>
-    );
-  };
-
   const subpageTitles: Record<string, string> = {
     calendar: 'Calendar Sync',
     units: 'Units',
@@ -1492,7 +1389,6 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
     notifications: 'Notifications',
     haptics: 'Haptics',
     appearance: 'Appearance',
-    pastRoutes: 'Past Routes',
   };
 
   return (
@@ -1622,7 +1518,6 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
               {currentPage === 'notifications' && renderNotificationsPage()}
               {currentPage === 'haptics' && renderHapticsPage()}
               {currentPage === 'appearance' && renderAppearancePage()}
-              {currentPage === 'pastRoutes' && renderPastRoutesPage()}
             </ScrollView>
           </Animated.View>
         </GestureDetector>
