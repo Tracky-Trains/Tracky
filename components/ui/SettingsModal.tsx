@@ -827,6 +827,23 @@ export default function SettingsModal({ onClose, onRefreshGTFS }: SettingsModalP
               activeOpacity={0.7}
               onPress={() => {
                 hapticLight();
+                AsyncStorage.removeItem('hasSeenWelcome').then(() => {
+                  Alert.alert('Done', 'Welcome modal will show on next app launch.');
+                });
+              }}
+            >
+              <View style={styles.itemIconContainer}>
+                <Ionicons name="hand-left-outline" size={22} color="#FBBF24" />
+              </View>
+              <View style={styles.itemContent}>
+                <Text style={[styles.itemTitle, { color: '#FBBF24' }]}>Show Welcome Modal</Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.settingsItem}
+              activeOpacity={0.7}
+              onPress={() => {
+                hapticLight();
                 onClose();
                 setTimeout(() => debugShowLoadingScreen(), 300);
               }}
